@@ -1,22 +1,13 @@
 // src/modules/auth/auth.controller.ts
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { RegisterDto } from './dto/register.dto';
 import { AuthResponseDto, LoginDto } from './dto/login.dto';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { CurrentUser } from '../../common/guards/access-control';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
-
-  /**
-   * Endpoint de Registro inicial: cria o Tenant e o Usuário Administrador
-   * POST /auth/register
-   */
-  @Post('register')
-  @HttpCode(HttpStatus.CREATED)
-  async register(@Body() dto: RegisterDto): Promise<AuthResponseDto> {
-    return this.authService.register(dto);
-  }
 
   /**
    * Endpoint de Login: emite JWT após validar credenciais
@@ -26,5 +17,11 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async login(@Body() dto: LoginDto): Promise<AuthResponseDto> {
     return this.authService.login(dto);
+  }
+
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  async me(@CurrentUser() user: any) {
+    return this.authService.getCurrentUser(user.sub);
   }
 }

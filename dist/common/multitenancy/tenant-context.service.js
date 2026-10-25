@@ -10,6 +10,13 @@ class TenantContextService {
     static getSession() {
         return this.storage.getStore();
     }
+    static setSession(session) {
+        const current = this.storage.getStore();
+        if (!current) {
+            throw new Error('TenantContextError: contexto da requisição não inicializado.');
+        }
+        Object.assign(current, session);
+    }
     static getTenantId() {
         const session = this.storage.getStore();
         if (!session || !session.tenantId) {
@@ -19,6 +26,13 @@ class TenantContextService {
     }
     static getUserId() {
         return this.storage.getStore()?.userId;
+    }
+    static getCenterId() {
+        const centerId = this.storage.getStore()?.centerId;
+        if (!centerId) {
+            throw new Error('CenterContextError: nenhum centro autorizado foi selecionado.');
+        }
+        return centerId;
     }
 }
 exports.TenantContextService = TenantContextService;

@@ -2,23 +2,30 @@
 import React, { useState } from 'react';
 import { CafeLogo } from '../components/Brand/CafeLogo';
 import { ArrowRight, Lock, Mail, ShieldCheck } from 'lucide-react';
+import { login } from '../services/auth';
 
 interface LoginViewProps {
   onLoginSuccess: () => void;
 }
 
 export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
-  const [email, setEmail] = useState('carlos@progressosuprimentos.com.br');
-  const [password, setPassword] = useState('••••••••••••');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    setError('');
+    try {
+      await login(email, password);
       onLoginSuccess();
-    }, 400);
+    } catch (loginError) {
+      setError(loginError instanceof Error ? loginError.message : 'Falha ao entrar.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -83,11 +90,11 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                 letterSpacing: '0.02em',
               }}
             >
-              Empresa / Tenant
+              Acesso à empresa
             </label>
             <input
               type="text"
-              value="Progresso Suprimentos (14.285.714/0001-90)"
+              value="A empresa será identificada pela sua conta"
               disabled
               style={{
                 width: '100%',
@@ -97,6 +104,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
               }}
             />
           </div>
+
+          {error && <p role="alert" style={{ color: 'var(--color-danger-solid)', fontSize: '12px', margin: '0 0 14px' }}>{error}</p>}
 
           {/* E-mail */}
           <div style={{ marginBottom: '16px' }}>

@@ -21,11 +21,12 @@ let JwtAuthGuard = class JwtAuthGuard extends (0, passport_1.AuthGuard)('jwt') {
         if (!user || !user.tenantId) {
             throw new common_1.UnauthorizedException('Token inválido: Tenant ID ausente nos claims.');
         }
-        tenant_context_service_1.TenantContextService.runWithContext({
+        request.tenantId = user.tenantId;
+        tenant_context_service_1.TenantContextService.setSession({
             tenantId: user.tenantId,
             userId: user.sub || user.userId,
             userRole: user.role,
-        }, () => {
+            isPrimaryAdmin: user.isPrimaryAdmin,
         });
         return true;
     }

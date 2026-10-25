@@ -19,6 +19,8 @@ const create_product_dto_1 = require("./dto/create-product.dto");
 const update_product_dto_1 = require("./dto/update-product.dto");
 const jwt_auth_guard_1 = require("../../common/guards/jwt-auth.guard");
 const domain_enums_1 = require("../../common/enums/domain.enums");
+const access_control_1 = require("../../common/guards/access-control");
+const domain_enums_2 = require("../../common/enums/domain.enums");
 let ProductsController = class ProductsController {
     productsService;
     constructor(productsService) {
@@ -47,6 +49,7 @@ let ProductsController = class ProductsController {
 exports.ProductsController = ProductsController;
 __decorate([
     (0, common_1.Post)(),
+    (0, access_control_1.Roles)(domain_enums_2.UserRole.ADMIN, domain_enums_2.UserRole.MANAGER, domain_enums_2.UserRole.STOCK),
     (0, common_1.HttpCode)(common_1.HttpStatus.CREATED),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -71,6 +74,7 @@ __decorate([
 ], ProductsController.prototype, "findOne", null);
 __decorate([
     (0, common_1.Put)(':id'),
+    (0, access_control_1.Roles)(domain_enums_2.UserRole.ADMIN, domain_enums_2.UserRole.MANAGER, domain_enums_2.UserRole.STOCK),
     __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -79,6 +83,7 @@ __decorate([
 ], ProductsController.prototype, "update", null);
 __decorate([
     (0, common_1.Delete)(':id'),
+    (0, access_control_1.Roles)(domain_enums_2.UserRole.ADMIN, domain_enums_2.UserRole.MANAGER, domain_enums_2.UserRole.STOCK),
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),
     __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __metadata("design:type", Function),
@@ -87,7 +92,8 @@ __decorate([
 ], ProductsController.prototype, "remove", null);
 exports.ProductsController = ProductsController = __decorate([
     (0, common_1.Controller)('products'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, access_control_1.CenterAccessGuard, access_control_1.RolesGuard),
+    (0, access_control_1.Roles)(domain_enums_2.UserRole.ADMIN, domain_enums_2.UserRole.MANAGER, domain_enums_2.UserRole.SALES, domain_enums_2.UserRole.PURCHASING, domain_enums_2.UserRole.FINANCIAL, domain_enums_2.UserRole.STOCK, domain_enums_2.UserRole.OPERATOR),
     __metadata("design:paramtypes", [products_service_1.ProductsService])
 ], ProductsController);
 //# sourceMappingURL=products.controller.js.map

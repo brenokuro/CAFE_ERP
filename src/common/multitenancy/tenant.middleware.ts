@@ -1,5 +1,5 @@
 // src/common/multitenancy/tenant.middleware.ts
-import { Injectable, NestMiddleware, UnauthorizedException } from '@nestjs/common';
+import { Injectable, NestMiddleware } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import { TenantContextService } from './tenant-context.service';
 
@@ -27,26 +27,11 @@ declare global {
  */
 @Injectable()
 export class TenantMiddleware implements NestMiddleware {
-  use(req: Request, res: Response, next: NextFunction) {
-    const user = req.user;
-    const headerTenantId = req.headers['x-tenant-id'] as string;
-
-    const tenantId = user?.tenantId || headerTenantId;
-
-    if (!tenantId) {
-      // Para rotas públicas (ex: /auth/login, /health), prossegue sem tenant context
-      return next();
-    }
-
-    req.tenantId = tenantId;
-
-    // Envolve a execução no AsyncLocalStorage
+  use(_req: Request, _res: Response, next: NextFunction) {
+    // Passport autentica depois do middleware. O guard preencherá a sessão
+    // dentro deste mesmo contexto assíncrono após validar o JWT.
     TenantContextService.runWithContext(
-      {
-        tenantId,
-        userId: user?.sub || 'anonymous',
-        userRole: user?.role || 'GUEST',
-      },
+      { tenantId: '', userId: 'anonymous', userRole: 'GUEST' },
       () => next(),
     );
   }

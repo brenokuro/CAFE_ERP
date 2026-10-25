@@ -27,17 +27,13 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       throw new UnauthorizedException('Token inválido: Tenant ID ausente nos claims.');
     }
 
-    // Configura o TenantContextService para a requisição atual
-    TenantContextService.runWithContext(
-      {
-        tenantId: user.tenantId,
-        userId: user.sub || user.userId,
-        userRole: user.role,
-      },
-      () => {
-        // Callback executado dentro do contexto
-      },
-    );
+    request.tenantId = user.tenantId;
+    TenantContextService.setSession({
+      tenantId: user.tenantId,
+      userId: user.sub || user.userId,
+      userRole: user.role,
+      isPrimaryAdmin: user.isPrimaryAdmin,
+    });
 
     return true;
   }

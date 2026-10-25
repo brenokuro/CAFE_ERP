@@ -23,6 +23,7 @@ let PurchasesService = class PurchasesService {
     async createPurchase(dto) {
         const tenantId = tenant_context_service_1.TenantContextService.getTenantId();
         const userId = tenant_context_service_1.TenantContextService.getUserId();
+        const centerId = tenant_context_service_1.TenantContextService.getCenterId();
         return this.prisma.$transaction(async (tx) => {
             const lastPurchase = await tx.purchaseOrder.findFirst({
                 where: { tenantId },
@@ -73,6 +74,7 @@ let PurchasesService = class PurchasesService {
             const purchaseOrder = await tx.purchaseOrder.create({
                 data: {
                     tenantId,
+                    centerId,
                     orderNumber,
                     supplierId: dto.supplierId,
                     status: initialStatus,
@@ -103,10 +105,11 @@ let PurchasesService = class PurchasesService {
                     categoryAccountId: dto.categoryAccountId,
                     userId,
                     tenantId,
+                    centerId,
                 });
             }
             return tx.purchaseOrder.findFirst({
-                where: { id: purchaseOrder.id, tenantId },
+                where: { id: purchaseOrder.id, tenantId, centerId },
                 include: {
                     items: { include: { product: true } },
                     supplier: true,
@@ -119,9 +122,10 @@ let PurchasesService = class PurchasesService {
     async receivePurchaseOrder(purchaseOrderId, options) {
         const tenantId = tenant_context_service_1.TenantContextService.getTenantId();
         const userId = tenant_context_service_1.TenantContextService.getUserId();
+        const centerId = tenant_context_service_1.TenantContextService.getCenterId();
         return this.prisma.$transaction(async (tx) => {
             const order = await tx.purchaseOrder.findFirst({
-                where: { id: purchaseOrderId, tenantId },
+                where: { id: purchaseOrderId, tenantId, centerId },
                 include: { items: { include: { product: true } } },
             });
             if (!order) {
@@ -140,13 +144,14 @@ let PurchasesService = class PurchasesService {
                 categoryAccountId: options?.categoryAccountId,
                 userId,
                 tenantId,
+                centerId,
             });
             await tx.purchaseOrder.update({
                 where: { id: order.id },
                 data: { status: domain_enums_1.PurchaseOrderStatus.RECEIVED },
             });
             return tx.purchaseOrder.findFirst({
-                where: { id: order.id, tenantId },
+                where: { id: order.id, tenantId, centerId },
                 include: {
                     items: { include: { product: true } },
                     supplier: true,
@@ -160,27 +165,38 @@ let PurchasesService = class PurchasesService {
         for (const item of order.items) {
             const product = productsMap.get(item.productId);
             if (product && product.type === 'PRODUCT') {
-                const currentStock = new client_1.Prisma.Decimal(product.stockQuantity ?? product.currentStock ?? 0);
+                const globalStock = new client_1.Prisma.Decimal(product.stockQuantity ?? 0);
+                const centerStock = await tx.centerStock.findUnique({ where: {
+                        tenantId_centerId_productId: { tenantId: ctx.tenantId, centerId: ctx.centerId, productId: item.productId },
+                    } });
+                const currentStock = new client_1.Prisma.Decimal(centerStock?.quantity ?? 0);
                 const currentCostPrice = new client_1.Prisma.Decimal(product.costPrice);
                 const quantityReceived = new client_1.Prisma.Decimal(item.quantity);
                 const unitCostReceived = new client_1.Prisma.Decimal(item.unitCost);
                 const newStock = currentStock.add(quantityReceived);
+                const newGlobalStock = globalStock.add(quantityReceived);
                 let newCostPrice = unitCostReceived;
-                if (newStock.greaterThan(0)) {
-                    const currentValuation = currentStock.mul(currentCostPrice);
+                if (newGlobalStock.greaterThan(0)) {
+                    const currentValuation = globalStock.mul(currentCostPrice);
                     const incomingValuation = quantityReceived.mul(unitCostReceived);
-                    newCostPrice = currentValuation.add(incomingValuation).div(newStock).toDecimalPlaces(4);
+                    newCostPrice = currentValuation.add(incomingValuation).div(newGlobalStock).toDecimalPlaces(4);
                 }
+                await tx.centerStock.upsert({
+                    where: { tenantId_centerId_productId: { tenantId: ctx.tenantId, centerId: ctx.centerId, productId: item.productId } },
+                    create: { tenantId: ctx.tenantId, centerId: ctx.centerId, productId: item.productId, quantity: newStock },
+                    update: { quantity: newStock },
+                });
                 await tx.product.update({
                     where: { id: item.productId },
                     data: {
-                        stockQuantity: newStock,
+                        stockQuantity: newGlobalStock,
                         costPrice: newCostPrice,
                     },
                 });
                 await tx.stockMovement.create({
                     data: {
                         tenantId: ctx.tenantId,
+                        centerId: ctx.centerId,
                         productId: item.productId,
                         movementTypeCode: domain_enums_1.MovementTypeCode.IN_PURCHASE,
                         quantity: quantityReceived,
@@ -211,6 +227,7 @@ let PurchasesService = class PurchasesService {
             await tx.financialRecord.create({
                 data: {
                     tenantId: ctx.tenantId,
+                    centerId: ctx.centerId,
                     type: domain_enums_1.FinancialRecordType.PAYABLE,
                     status: domain_enums_1.FinancialRecordStatus.PENDING,
                     description: `Compra #${order.orderNumber} ${order.invoiceNumber ? `(NF-e ${order.invoiceNumber})` : ''} - Parcela ${i}/${installments}`,
@@ -230,9 +247,11 @@ let PurchasesService = class PurchasesService {
     }
     async findAll(status) {
         const tenantId = tenant_context_service_1.TenantContextService.getTenantId();
+        const centerId = tenant_context_service_1.TenantContextService.getCenterId();
         return this.prisma.client.purchaseOrder.findMany({
             where: {
                 tenantId,
+                centerId,
                 ...(status ? { status } : {}),
             },
             include: {
@@ -245,8 +264,9 @@ let PurchasesService = class PurchasesService {
     }
     async findOne(id) {
         const tenantId = tenant_context_service_1.TenantContextService.getTenantId();
+        const centerId = tenant_context_service_1.TenantContextService.getCenterId();
         const order = await this.prisma.client.purchaseOrder.findFirst({
-            where: { id, tenantId },
+            where: { id, tenantId, centerId },
             include: {
                 supplier: true,
                 items: { include: { product: true } },

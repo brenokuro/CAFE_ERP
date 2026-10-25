@@ -6,18 +6,19 @@ export declare class BankingController {
     createAccount(dto: CreateBankAccountDto): Promise<any>;
     findAllAccounts(): Promise<any>;
     createTransaction(dto: CreateBankTransactionDto): Promise<{
-        tenantId: string;
         id: string;
-        createdAt: Date;
         type: import(".prisma/client").$Enums.BankTransactionType;
-        description: string;
-        bankAccountId: string;
-        financialRecordId: string | null;
         amount: import("@prisma/client/runtime/library").Decimal;
         transactionDate: Date;
+        description: string;
         reconciled: boolean;
         reconciledAt: Date | null;
         externalReferenceId: string | null;
+        createdAt: Date;
+        tenantId: string;
+        centerId: string | null;
+        bankAccountId: string;
+        financialRecordId: string | null;
     }>;
     findTransactions(id: string, reconciled?: string): Promise<any>;
 }

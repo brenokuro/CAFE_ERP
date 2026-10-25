@@ -1,5 +1,30 @@
 # Arquitetura Backend & Modelagem de Banco de Dados — ERP para PMEs
 
+## Execução local
+
+Requisitos: Node.js 20+, PostgreSQL e npm.
+
+1. Copie `.env.example` para `.env` e informe `DATABASE_URL` e um `JWT_SECRET` aleatório com pelo menos 32 caracteres.
+2. Instale as dependências na raiz e no frontend: `npm ci` e `npm ci --prefix frontend`.
+3. Gere o Prisma Client e aplique as migrações: `npm run prisma:generate` e `npm run prisma:migrate`.
+4. Inicialize o primeiro administrador pela linha de comando, nunca por cadastro público. Em banco novo, informe `BOOTSTRAP_TENANT_DOCUMENT`, `BOOTSTRAP_COMPANY_NAME`, `BOOTSTRAP_COMPANY_EMAIL`, `BOOTSTRAP_ADMIN_NAME`, `BOOTSTRAP_ADMIN_EMAIL` e `BOOTSTRAP_ADMIN_PASSWORD` (mínimo 12 caracteres), e rode `npm run admin:bootstrap`. Para empresa existente, informe `BOOTSTRAP_TENANT_ID` ou `BOOTSTRAP_TENANT_DOCUMENT` junto dos dados do administrador.
+5. Inicie a API com `npm run start:dev` (o comando compila o backend antes de iniciar; em produção, use `npm start` após o build).
+6. Em outro terminal, inicie a interface com `npm run dev --prefix frontend`.
+
+A API fica em `http://localhost:3000/api/v1`; a interface usa essa URL por padrão. Para outro endereço, defina `VITE_API_URL` no ambiente do Vite. `CORS_ORIGINS` aceita origens separadas por vírgula e, por padrão, permite `http://localhost:5173`.
+
+O login da interface já valida as credenciais na API. As telas operacionais ainda usam dados demonstrativos em memória (`frontend/src/services/api.ts`); essas alterações não são persistidas e devem ser substituídas por chamadas aos endpoints antes de usar o ERP com dados reais.
+
+### Administração, centros e dados legados
+
+- O endpoint público de cadastro foi removido. `POST /api/v1/auth/login` autentica; `GET /api/v1/auth/me` retorna perfil e centros autorizados.
+- O primeiro administrador é marcado no banco por `is_primary_admin`, protegido por índice único parcial por empresa. A inicialização é feita pelo script local `npm run admin:bootstrap`, que aborta se já existir um administrador principal.
+- `GET /api/v1/centers` lista os centros ativos acessíveis ao usuário. Operações de negócio exigem `X-Center-ID`; o servidor confere que o centro pertence à empresa, está ativo e está vinculado ao usuário.
+- Apenas o administrador principal acessa `/api/v1/admin/users`, `/api/v1/admin/centers`, `/api/v1/admin/audit-logs` e `/api/v1/admin/unassigned-records`.
+- Registros históricos recebem `center_id = NULL` na migration e não são atribuídos automaticamente. O principal pode associá-los explicitamente em `POST /api/v1/admin/unassigned-records/:entity/:id/assign` (`entity`: `salesOrder`, `purchaseOrder`, `stockMovement`, `financialRecord`, `bankAccount`, `bankTransaction`, `batch` ou `productStock`). O estoque legado de produto aparece como saldo pendente; atribuí-lo cria o saldo do centro escolhido sem alterar o total histórico do produto.
+- Os papéis de operação são validados no backend. O perfil principal não pode ser promovido por API; usuários desativados e empresas inativas deixam de autenticar mesmo que tenham um JWT ainda válido.
+- Execute `npm test` para compilar o backend e rodar os testes de acesso a centros e guardas administrativas.
+
 Projeto arquitetural de um ERP modular, leve e de alta integridade transacional voltado para Pequenas e Médias Empresas (PMEs), estruturado em torno dos três fluxos operacionais vitais: **Vendas/Faturamento**, **Compras/Estoque** e **Gestão Financeira**.
 
 ---
@@ -12,7 +37,7 @@ Projeto arquitetural de um ERP modular, leve e de alta integridade transacional 
 | **Framework Web** | **NestJS** | Padrão arquitetural corporativo pronto para produção (Injeção de Dependências, arquitetura modular, Guards, Interceptors, Pipes de validação nativos). |
 | **Banco de Dados** | **PostgreSQL (v15+)** | Banco relacional robusto com garantias ACID estritas, suporte nativo a tipos numéricos de alta precisão (`DECIMAL(15, 4)`), tipos de chave UUID, e **Row-Level Security (RLS)**. |
 | **ORM** | **Prisma ORM (v5+)** | Migrações declarativas, clientes tipados de alta performance e **Prisma Client Extensions** para injeção automática de filtros multi-tenant. |
-| **Autenticação & Multi-tenancy** | **JWT + AsyncLocalStorage** | Token JWT contendo `tenantId`, `userId` e permissões (RBAC), interceptado e disponibilizado de forma segura em toda a cadeia assíncrona. |
+| **Autenticação & Multi-tenancy** | **JWT + AsyncLocalStorage** | JWT validado contra usuário e empresa no banco em cada requisição; papel e centros autorizados são obtidos no servidor. |
 
 ---
 
@@ -62,8 +87,8 @@ Adota-se a arquitetura **Shared Database, Shared Schema com `tenant_id` obrigat�
 ### Camadas de Segurança e Isolamento:
 
 1. **Contexto de Execução Assíncrono (`AsyncLocalStorage`)**:
-   - O `TenantMiddleware` valida o JWT do usuário e inicializa o contexto com `{ tenantId, userId, role }`.
-   - Evita acoplamento ou passagem manual do `tenantId` em todos os métodos dos serviços da aplicação.
+   - O middleware abre o contexto assíncrono; o guard JWT revalida usuário e empresa no banco e injeta `{ tenantId, userId, role, isPrimaryAdmin }`.
+   - O guard de centro confere `X-Center-ID` e a associação ativa do usuário antes de permitir qualquer operação.
 
 2. **Interceptação Transparente no ORM (`Prisma Client Extension`)**:
    - Todas as queries de leitura (`findMany`, `findFirst`, `count`) têm a cláusula `{ where: { tenantId } }` injetada automaticamente.
@@ -111,11 +136,11 @@ Adota-se a arquitetura **Shared Database, Shared Schema com `tenant_id` obrigat�
 
 ## 5. Endpoints REST da API
 
-Todos os endpoints operam sob o prefixo global `/api/v1` e são protegidos pelo `JwtAuthGuard` (exceto `/auth/*`), exigindo o header `Authorization: Bearer <TOKEN>`.
+Todos os endpoints de negócio operam sob `/api/v1` e exigem `Authorization: Bearer <TOKEN>`. Operações de centro também exigem `X-Center-ID`; o servidor valida o vínculo antes de executar consultas ou gravações. Login é a única rota pública; a criação do primeiro administrador é um comando local de inicialização.
 
 ### 5.1 Autenticação (`/api/v1/auth`)
-* `POST /auth/register`: Cadastro atômico da Empresa (Tenant) e do primeiro Usuário Administrador, inicializando automaticamente o Caixa Geral e o Plano de Contas.
-* `POST /auth/login`: Validação de credenciais com bcrypt e emissão de JWT contendo `sub`, `tenantId`, `email` e `role`.
+* `POST /auth/login`: Validação de credenciais com bcrypt e emissão de JWT. Usuário, papel e status são revalidados no banco em cada requisição.
+* `GET /auth/me`: Perfil e centros ativos autorizados para a sessão.
 
 ### 5.2 Cadastros Base (`/contacts`, `/products`, `/categories`)
 * `CRUD /contacts`: Cadastro unificado de Pessoas (Clientes, Fornecedores ou Ambos) com validação de CPF/CNPJ.
@@ -184,7 +209,8 @@ Todos os endpoints operam sob o prefixo global `/api/v1` e são protegidos pelo 
 │   │       ├── tenant-context.service.ts   # AsyncLocalStorage de sessão
 │   │       └── tenant.middleware.ts        # Middleware de captura do Tenant
 │   ├── modules/
-│   │   ├── auth/                      # POST /auth/register e /auth/login
+│   │   ├── auth/                      # Login e sessão; sem cadastro público
+│   │   ├── admin/                     # Gestão protegida de usuários, centros e auditoria
 │   │   │   ├── dto/
 │   │   │   ├── strategies/
 │   │   │   ├── auth.controller.ts

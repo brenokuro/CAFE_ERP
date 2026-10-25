@@ -7,16 +7,16 @@ export declare class ProductsService {
     private readonly prisma;
     constructor(prisma: PrismaService);
     create(dto: CreateProductDto): Promise<{
-        tenantId: string;
         id: string;
+        type: import(".prisma/client").$Enums.ProductType;
+        description: string | null;
+        createdAt: Date;
+        tenantId: string;
         name: string;
         active: boolean;
-        createdAt: Date;
         updatedAt: Date;
-        type: import(".prisma/client").$Enums.ProductType;
         sku: string;
         barcode: string | null;
-        description: string | null;
         unitOfMeasure: import(".prisma/client").$Enums.UnitOfMeasure;
         unit: string | null;
         isBatchControlled: boolean;

@@ -21,6 +21,7 @@ export class AuthResponseDto {
     name: string;
     email: string;
     role: string;
+    isPrimaryAdmin: boolean;
   };
   tenant: {
     id: string;

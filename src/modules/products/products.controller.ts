@@ -18,13 +18,17 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { ProductType } from '../../common/enums/domain.enums';
+import { CenterAccessGuard, Roles, RolesGuard } from '../../common/guards/access-control';
+import { UserRole } from '../../common/enums/domain.enums';
 
 @Controller('products')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, CenterAccessGuard, RolesGuard)
+@Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.SALES, UserRole.PURCHASING, UserRole.FINANCIAL, UserRole.STOCK, UserRole.OPERATOR)
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
   @Post()
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.STOCK)
   @HttpCode(HttpStatus.CREATED)
   async create(@Body() dto: CreateProductDto) {
     return this.productsService.create(dto);
@@ -49,6 +53,7 @@ export class ProductsController {
   }
 
   @Put(':id')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.STOCK)
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateProductDto,
@@ -57,6 +62,7 @@ export class ProductsController {
   }
 
   @Delete(':id')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.STOCK)
   @HttpCode(HttpStatus.OK)
   async remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.productsService.remove(id);

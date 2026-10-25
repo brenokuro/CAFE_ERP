@@ -11,9 +11,13 @@ import { BankingModule } from './modules/banking/banking.module';
 import { StockModule } from './modules/stock/stock.module';
 import { PrismaService } from './common/database/prisma.service';
 import { TenantMiddleware } from './common/multitenancy/tenant.middleware';
+import { AccessModule } from './common/guards/access.module';
+import { AdminModule } from './modules/admin/admin.module';
 
 @Module({
   imports: [
+    AccessModule,
+    AdminModule,
     AuthModule,
     ContactsModule,
     ProductsModule,

@@ -23,6 +23,7 @@ let SalesService = class SalesService {
     async createOrder(dto) {
         const tenantId = tenant_context_service_1.TenantContextService.getTenantId();
         const userId = tenant_context_service_1.TenantContextService.getUserId();
+        const centerId = tenant_context_service_1.TenantContextService.getCenterId();
         return this.prisma.$transaction(async (tx) => {
             const lastOrder = await tx.salesOrder.findFirst({
                 where: { tenantId },
@@ -70,6 +71,7 @@ let SalesService = class SalesService {
             const salesOrder = await tx.salesOrder.create({
                 data: {
                     tenantId,
+                    centerId,
                     orderNumber,
                     customerId: dto.customerId,
                     status: initialStatus,
@@ -96,10 +98,11 @@ let SalesService = class SalesService {
                     categoryAccountId: dto.categoryAccountId,
                     userId,
                     tenantId,
+                    centerId,
                 });
             }
             return tx.salesOrder.findFirst({
-                where: { id: salesOrder.id, tenantId },
+                where: { id: salesOrder.id, tenantId, centerId },
                 include: {
                     items: { include: { product: true } },
                     customer: true,
@@ -112,9 +115,10 @@ let SalesService = class SalesService {
     async invoiceOrder(salesOrderId, options) {
         const tenantId = tenant_context_service_1.TenantContextService.getTenantId();
         const userId = tenant_context_service_1.TenantContextService.getUserId();
+        const centerId = tenant_context_service_1.TenantContextService.getCenterId();
         return this.prisma.$transaction(async (tx) => {
             const order = await tx.salesOrder.findFirst({
-                where: { id: salesOrderId, tenantId },
+                where: { id: salesOrderId, tenantId, centerId },
                 include: { items: { include: { product: true } } },
             });
             if (!order) {
@@ -133,13 +137,14 @@ let SalesService = class SalesService {
                 categoryAccountId: options?.categoryAccountId,
                 userId,
                 tenantId,
+                centerId,
             });
             await tx.salesOrder.update({
                 where: { id: order.id },
                 data: { status: domain_enums_1.SalesOrderStatus.INVOICED },
             });
             return tx.salesOrder.findFirst({
-                where: { id: order.id, tenantId },
+                where: { id: order.id, tenantId, centerId },
                 include: {
                     items: { include: { product: true } },
                     customer: true,
@@ -153,19 +158,28 @@ let SalesService = class SalesService {
         for (const item of order.items) {
             const product = productsMap.get(item.productId);
             if (product && product.type === 'PRODUCT') {
-                const currentStock = new client_1.Prisma.Decimal(product.stockQuantity ?? product.currentStock ?? 0);
+                const centerStock = await tx.centerStock.findUnique({ where: {
+                        tenantId_centerId_productId: { tenantId: ctx.tenantId, centerId: ctx.centerId, productId: item.productId },
+                    } });
+                const currentStock = new client_1.Prisma.Decimal(centerStock?.quantity ?? 0);
                 const quantityToDeduct = new client_1.Prisma.Decimal(item.quantity);
                 if (currentStock.lessThan(quantityToDeduct)) {
                     throw new common_1.BadRequestException(`Estoque insuficiente para "${product.name}". Saldo disponível: ${currentStock}, Solicitado: ${quantityToDeduct}.`);
                 }
                 const newStock = currentStock.sub(quantityToDeduct);
+                await tx.centerStock.upsert({
+                    where: { tenantId_centerId_productId: { tenantId: ctx.tenantId, centerId: ctx.centerId, productId: item.productId } },
+                    create: { tenantId: ctx.tenantId, centerId: ctx.centerId, productId: item.productId, quantity: newStock },
+                    update: { quantity: newStock },
+                });
                 await tx.product.update({
                     where: { id: item.productId },
-                    data: { stockQuantity: newStock },
+                    data: { stockQuantity: { decrement: quantityToDeduct } },
                 });
                 await tx.stockMovement.create({
                     data: {
                         tenantId: ctx.tenantId,
+                        centerId: ctx.centerId,
                         productId: item.productId,
                         movementTypeCode: domain_enums_1.MovementTypeCode.OUT_SALE,
                         quantity: quantityToDeduct,
@@ -196,6 +210,7 @@ let SalesService = class SalesService {
             await tx.financialRecord.create({
                 data: {
                     tenantId: ctx.tenantId,
+                    centerId: ctx.centerId,
                     type: domain_enums_1.FinancialRecordType.RECEIVABLE,
                     status: domain_enums_1.FinancialRecordStatus.PENDING,
                     description: `Venda #${order.orderNumber} - Parcela ${i}/${installments}`,
@@ -215,9 +230,11 @@ let SalesService = class SalesService {
     }
     async findAll(status) {
         const tenantId = tenant_context_service_1.TenantContextService.getTenantId();
+        const centerId = tenant_context_service_1.TenantContextService.getCenterId();
         return this.prisma.client.salesOrder.findMany({
             where: {
                 tenantId,
+                centerId,
                 ...(status ? { status } : {}),
             },
             include: {
@@ -230,8 +247,9 @@ let SalesService = class SalesService {
     }
     async findOne(id) {
         const tenantId = tenant_context_service_1.TenantContextService.getTenantId();
+        const centerId = tenant_context_service_1.TenantContextService.getCenterId();
         const order = await this.prisma.client.salesOrder.findFirst({
-            where: { id, tenantId },
+            where: { id, tenantId, centerId },
             include: {
                 customer: true,
                 items: { include: { product: true } },

@@ -11,7 +11,7 @@ import { PrismaService } from '../../common/database/prisma.service';
   imports: [
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({
-      secret: process.env.JWT_SECRET || 'erp-pme-super-secret-key-change-in-production',
+      secret: process.env.JWT_SECRET,
       signOptions: { expiresIn: '8h' },
     }),
   ],

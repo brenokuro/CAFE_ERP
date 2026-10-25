@@ -17,6 +17,8 @@ const common_1 = require("@nestjs/common");
 const banking_service_1 = require("./banking.service");
 const create_bank_account_dto_1 = require("./dto/create-bank-account.dto");
 const jwt_auth_guard_1 = require("../../common/guards/jwt-auth.guard");
+const access_control_1 = require("../../common/guards/access-control");
+const domain_enums_1 = require("../../common/enums/domain.enums");
 let BankingController = class BankingController {
     bankingService;
     constructor(bankingService) {
@@ -68,7 +70,8 @@ __decorate([
 ], BankingController.prototype, "findTransactions", null);
 exports.BankingController = BankingController = __decorate([
     (0, common_1.Controller)('banking'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, access_control_1.CenterAccessGuard, access_control_1.RolesGuard),
+    (0, access_control_1.Roles)(domain_enums_1.UserRole.ADMIN, domain_enums_1.UserRole.MANAGER, domain_enums_1.UserRole.FINANCIAL),
     __metadata("design:paramtypes", [banking_service_1.BankingService])
 ], BankingController);
 //# sourceMappingURL=banking.controller.js.map

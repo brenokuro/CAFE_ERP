@@ -32,27 +32,29 @@ let StockRepository = class StockRepository {
             where: { code },
         });
     }
-    async findBatchById(batchId, productId, tenantId, tx) {
+    async findBatchById(batchId, productId, tenantId, centerId, tx) {
         const client = this.getClient(tx);
         return client.productBatch.findFirst({
-            where: { id: batchId, productId, tenantId },
+            where: { id: batchId, productId, tenantId, centerId },
         });
     }
-    async findBatchByCode(productId, batchCode, tenantId, tx) {
+    async findBatchByCode(productId, batchCode, tenantId, centerId, tx) {
         const client = this.getClient(tx);
         return client.productBatch.findFirst({
             where: {
                 tenantId,
+                centerId,
                 productId,
                 batchCode: batchCode.trim(),
             },
         });
     }
-    async findActiveBatchesFifo(productId, tenantId, tx) {
+    async findActiveBatchesFifo(productId, tenantId, centerId, tx) {
         const client = this.getClient(tx);
         return client.productBatch.findMany({
             where: {
                 tenantId,
+                centerId,
                 productId,
                 quantity: { gt: 0 },
             },
@@ -75,12 +77,14 @@ let StockRepository = class StockRepository {
             data: { quantity: newQuantity },
         });
     }
-    async updateProductStock(productId, newStock, tx) {
+    async updateProductStock(productId, globalStock, centerStock, tenantId, centerId, tx) {
         const client = this.getClient(tx);
-        return client.product.update({
-            where: { id: productId },
-            data: { stockQuantity: newStock },
+        await client.centerStock.upsert({
+            where: { tenantId_centerId_productId: { tenantId, centerId, productId } },
+            create: { tenantId, centerId, productId, quantity: centerStock },
+            update: { quantity: centerStock },
         });
+        return client.product.update({ where: { id: productId }, data: { stockQuantity: globalStock } });
     }
     async createStockMovement(data, tx) {
         const client = this.getClient(tx);
@@ -102,12 +106,13 @@ let StockRepository = class StockRepository {
             },
         });
     }
-    async findMovementsPaginated(tenantId, filters) {
+    async findMovementsPaginated(tenantId, centerId, filters) {
         const page = Math.max(1, Number(filters.page) || 1);
         const limit = Math.max(1, Math.min(100, Number(filters.limit) || 20));
         const skip = (page - 1) * limit;
         const where = {
             tenantId,
+            centerId,
             ...(filters.productId ? { productId: filters.productId } : {}),
             ...(filters.movementTypeCode ? { movementTypeCode: filters.movementTypeCode } : {}),
             ...(filters.userId ? { userId: filters.userId } : {}),
@@ -162,9 +167,9 @@ let StockRepository = class StockRepository {
             },
         };
     }
-    async findBatchesByProductId(productId, tenantId) {
+    async findBatchesByProductId(productId, tenantId, centerId) {
         return this.prisma.client.productBatch.findMany({
-            where: { tenantId, productId },
+            where: { tenantId, productId, centerId },
             orderBy: [{ expirationDate: 'asc' }, { createdAt: 'desc' }],
         });
     }

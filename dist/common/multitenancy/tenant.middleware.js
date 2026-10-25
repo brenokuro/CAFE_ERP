@@ -10,19 +10,8 @@ exports.TenantMiddleware = void 0;
 const common_1 = require("@nestjs/common");
 const tenant_context_service_1 = require("./tenant-context.service");
 let TenantMiddleware = class TenantMiddleware {
-    use(req, res, next) {
-        const user = req.user;
-        const headerTenantId = req.headers['x-tenant-id'];
-        const tenantId = user?.tenantId || headerTenantId;
-        if (!tenantId) {
-            return next();
-        }
-        req.tenantId = tenantId;
-        tenant_context_service_1.TenantContextService.runWithContext({
-            tenantId,
-            userId: user?.sub || 'anonymous',
-            userRole: user?.role || 'GUEST',
-        }, () => next());
+    use(_req, _res, next) {
+        tenant_context_service_1.TenantContextService.runWithContext({ tenantId: '', userId: 'anonymous', userRole: 'GUEST' }, () => next());
     }
 };
 exports.TenantMiddleware = TenantMiddleware;

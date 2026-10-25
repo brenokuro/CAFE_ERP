@@ -39,6 +39,7 @@ export class StockService {
   async createMovement(dto: CreateStockMovementDto) {
     const tenantId = TenantContextService.getTenantId();
     const userId = TenantContextService.getUserId();
+    const centerId = TenantContextService.getCenterId();
 
     const movementCode = String(dto.movementTypeCode || dto.movement_type_code || '').trim();
     const productId = dto.productId || dto.product_id;
@@ -81,6 +82,24 @@ export class StockService {
         throw new BadRequestException('Não é permitido lançar movimentação física de estoque para itens do tipo Serviço.');
       }
 
+      if (dto.salesOrderId) {
+        const order = await tx.salesOrder.findFirst({ where: { id: dto.salesOrderId, tenantId, centerId }, select: { id: true } });
+        if (!order) throw new NotFoundException('Venda de referência não pertence ao centro selecionado.');
+      }
+      if (dto.purchaseOrderId) {
+        const order = await tx.purchaseOrder.findFirst({ where: { id: dto.purchaseOrderId, tenantId, centerId }, select: { id: true } });
+        if (!order) throw new NotFoundException('Compra de referência não pertence ao centro selecionado.');
+      }
+
+      if (dto.salesOrderId) {
+        const order = await tx.salesOrder.findFirst({ where: { id: dto.salesOrderId, tenantId, centerId }, select: { id: true } });
+        if (!order) throw new NotFoundException('Venda de referência não pertence ao centro selecionado.');
+      }
+      if (dto.purchaseOrderId) {
+        const order = await tx.purchaseOrder.findFirst({ where: { id: dto.purchaseOrderId, tenantId, centerId }, select: { id: true } });
+        if (!order) throw new NotFoundException('Compra de referência não pertence ao centro selecionado.');
+      }
+
       // 2. Determina a direção da movimentação (Entrada vs Saída)
       const movementType = await this.stockRepository.findMovementType(movementCode, tx);
 
@@ -99,12 +118,17 @@ export class StockService {
         : entryCodes.includes(movementCode as any);
 
       // 3. Validação de Estoque Negativo Geral
-      const currentStock = new Prisma.Decimal(product.stockQuantity);
+      const centerBalance = await tx.centerStock.findUnique({ where: {
+        tenantId_centerId_productId: { tenantId, centerId, productId: product.id },
+      } });
+      const currentStock = new Prisma.Decimal(centerBalance?.quantity ?? 0);
+      const globalStock = new Prisma.Decimal(product.stockQuantity);
       const movementQty = new Prisma.Decimal(dto.quantity);
 
       const newStock = isEntry
         ? currentStock.add(movementQty)
         : currentStock.sub(movementQty);
+      const newGlobalStock = isEntry ? globalStock.add(movementQty) : globalStock.sub(movementQty);
 
       if (!isEntry && newStock.isNegative()) {
         throw new BadRequestException(
@@ -130,12 +154,12 @@ export class StockService {
           let targetBatch: any = null;
 
           if (requestedBatchId) {
-            targetBatch = await this.stockRepository.findBatchById(requestedBatchId, product.id, tenantId, tx);
+            targetBatch = await this.stockRepository.findBatchById(requestedBatchId, product.id, tenantId, centerId, tx);
             if (!targetBatch) {
               throw new NotFoundException(`Lote com ID "${requestedBatchId}" não encontrado para o produto "${product.name}".`);
             }
           } else if (requestedBatchCode) {
-            targetBatch = await this.stockRepository.findBatchByCode(product.id, requestedBatchCode, tenantId, tx);
+            targetBatch = await this.stockRepository.findBatchByCode(product.id, requestedBatchCode, tenantId, centerId, tx);
           }
 
           if (targetBatch) {
@@ -152,6 +176,7 @@ export class StockService {
             targetBatch = await this.stockRepository.createBatch(
               {
                 tenantId,
+                centerId,
                 productId: product.id,
                 batchCode: batchCodeToCreate,
                 expirationDate,
@@ -162,12 +187,13 @@ export class StockService {
           }
 
           // Atualiza saldo geral do produto
-          await this.stockRepository.updateProductStock(product.id, newStock, tx);
+          await this.stockRepository.updateProductStock(product.id, newGlobalStock, newStock, tenantId, centerId, tx);
 
           // Registra movimentação auditável
           return this.stockRepository.createStockMovement(
             {
               tenantId,
+              centerId,
               productId: product.id,
               batchId: targetBatch.id,
               movementTypeCode: movementCode,
@@ -191,7 +217,7 @@ export class StockService {
 
           // Subcaso A.1: batchId explicitamente informado
           if (requestedBatchId) {
-            const batch = await this.stockRepository.findBatchById(requestedBatchId, product.id, tenantId, tx);
+            const batch = await this.stockRepository.findBatchById(requestedBatchId, product.id, tenantId, centerId, tx);
 
             if (!batch) {
               throw new NotFoundException(`Lote com ID "${requestedBatchId}" não encontrado para o produto "${product.name}".`);
@@ -207,11 +233,12 @@ export class StockService {
             }
 
             await this.stockRepository.updateBatchQuantity(batch.id, newBatchQty, tx);
-            await this.stockRepository.updateProductStock(product.id, newStock, tx);
+            await this.stockRepository.updateProductStock(product.id, newGlobalStock, newStock, tenantId, centerId, tx);
 
             return this.stockRepository.createStockMovement(
               {
                 tenantId,
+                centerId,
                 productId: product.id,
                 batchId: batch.id,
                 movementTypeCode: movementCode,
@@ -234,7 +261,7 @@ export class StockService {
 
           // Subcaso A.2: batchId NÃO informado -> APLICAÇÃO DA REGRA PEPS/FIFO (FEFO)
           // Busca lotes com saldo > 0 ordenados pela expiration_date mais próxima
-          const activeBatches = await this.stockRepository.findActiveBatchesFifo(product.id, tenantId, tx);
+          const activeBatches = await this.stockRepository.findActiveBatchesFifo(product.id, tenantId, centerId, tx);
 
           if (!activeBatches || activeBatches.length === 0) {
             throw new BadRequestException(
@@ -278,6 +305,7 @@ export class StockService {
             const movementRecord = await this.stockRepository.createStockMovement(
               {
                 tenantId,
+                centerId,
                 productId: product.id,
                 batchId: batch.id,
                 movementTypeCode: movementCode,
@@ -306,7 +334,7 @@ export class StockService {
           }
 
           // Atualiza saldo geral do produto no catálogo
-          await this.stockRepository.updateProductStock(product.id, newStock, tx);
+          await this.stockRepository.updateProductStock(product.id, newGlobalStock, newStock, tenantId, centerId, tx);
 
           return primaryMovementResult;
         }
@@ -315,11 +343,12 @@ export class StockService {
       // ==========================================
       // CASO B: PRODUTO SEM CONTROLE DE LOTE
       // ==========================================
-      await this.stockRepository.updateProductStock(product.id, newStock, tx);
+      await this.stockRepository.updateProductStock(product.id, newGlobalStock, newStock, tenantId, centerId, tx);
 
       return this.stockRepository.createStockMovement(
         {
           tenantId,
+          centerId,
           productId: product.id,
           batchId: null,
           movementTypeCode: movementCode,
@@ -353,7 +382,8 @@ export class StockService {
    */
   async getMovements(filters: StockMovementQueryDto) {
     const tenantId = TenantContextService.getTenantId();
-    return this.stockRepository.findMovementsPaginated(tenantId, filters);
+    const centerId = TenantContextService.getCenterId();
+    return this.stockRepository.findMovementsPaginated(tenantId, centerId, filters);
   }
 
   /**
@@ -361,6 +391,7 @@ export class StockService {
    */
   async createBatch(dto: CreateProductBatchDto) {
     const tenantId = TenantContextService.getTenantId();
+    const centerId = TenantContextService.getCenterId();
     const productId = dto.productId || dto.product_id;
     const batchCode = (dto.batchCode || dto.batch_code || '').trim();
 
@@ -378,7 +409,7 @@ export class StockService {
       throw new NotFoundException(`Produto com ID "${productId}" não encontrado.`);
     }
 
-    const existingBatch = await this.stockRepository.findBatchByCode(productId, batchCode, tenantId);
+    const existingBatch = await this.stockRepository.findBatchByCode(productId, batchCode, tenantId, centerId);
 
     if (existingBatch) {
       throw new ConflictException(`O lote "${batchCode}" já está cadastrado para este produto.`);
@@ -388,12 +419,29 @@ export class StockService {
       ? new Date(dto.expirationDate || dto.expiration_date!)
       : null;
 
-    return this.stockRepository.createBatch({
-      tenantId,
-      productId,
-      batchCode,
-      expirationDate,
-      quantity: new Prisma.Decimal(dto.initialQuantity || dto.initial_quantity || 0),
+    const initialQuantity = new Prisma.Decimal(dto.initialQuantity || dto.initial_quantity || 0);
+    return this.prisma.$transaction(async (tx) => {
+      const batch = await this.stockRepository.createBatch({
+        tenantId, centerId, productId, batchCode, expirationDate, quantity: initialQuantity,
+      }, tx);
+      if (initialQuantity.greaterThan(0)) {
+        const centerBalance = await tx.centerStock.findUnique({ where: {
+          tenantId_centerId_productId: { tenantId, centerId, productId },
+        } });
+        const previousCenterStock = new Prisma.Decimal(centerBalance?.quantity ?? 0);
+        const nextCenterStock = previousCenterStock.add(initialQuantity);
+        const nextGlobalStock = new Prisma.Decimal(product.stockQuantity).add(initialQuantity);
+        await this.stockRepository.updateProductStock(productId, nextGlobalStock, nextCenterStock, tenantId, centerId, tx);
+        await this.stockRepository.createStockMovement({
+          tenantId, centerId, productId, batchId: batch.id,
+          movementTypeCode: MovementTypeCode.IN_PURCHASE,
+          quantity: initialQuantity, previousStock: previousCenterStock, newStock: nextCenterStock,
+          unitCost: product.costPrice, totalCost: initialQuantity.mul(product.costPrice),
+          documentNumber: `LOTE-${batchCode}`, userId: TenantContextService.getUserId() || null,
+          reason: 'Saldo inicial do lote', referenceType: StockReferenceType.MANUAL,
+        }, tx);
+      }
+      return batch;
     });
   }
 
@@ -403,13 +451,14 @@ export class StockService {
    */
   async getProductBatches(productId: string): Promise<ProductBatchResponseDto[]> {
     const tenantId = TenantContextService.getTenantId();
+    const centerId = TenantContextService.getCenterId();
 
     const product = await this.stockRepository.findProductById(productId, tenantId);
     if (!product) {
       throw new NotFoundException(`Produto com ID "${productId}" não encontrado.`);
     }
 
-    const batches = await this.stockRepository.findBatchesByProductId(productId, tenantId);
+    const batches = await this.stockRepository.findBatchesByProductId(productId, tenantId, centerId);
     const now = new Date();
 
     return batches.map((b: any) => {

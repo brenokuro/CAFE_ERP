@@ -19,6 +19,8 @@ const create_contact_dto_1 = require("./dto/create-contact.dto");
 const update_contact_dto_1 = require("./dto/update-contact.dto");
 const jwt_auth_guard_1 = require("../../common/guards/jwt-auth.guard");
 const domain_enums_1 = require("../../common/enums/domain.enums");
+const access_control_1 = require("../../common/guards/access-control");
+const domain_enums_2 = require("../../common/enums/domain.enums");
 let ContactsController = class ContactsController {
     contactsService;
     constructor(contactsService) {
@@ -43,6 +45,7 @@ let ContactsController = class ContactsController {
 exports.ContactsController = ContactsController;
 __decorate([
     (0, common_1.Post)(),
+    (0, access_control_1.Roles)(domain_enums_2.UserRole.ADMIN, domain_enums_2.UserRole.MANAGER, domain_enums_2.UserRole.SALES, domain_enums_2.UserRole.PURCHASING),
     (0, common_1.HttpCode)(common_1.HttpStatus.CREATED),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -66,6 +69,7 @@ __decorate([
 ], ContactsController.prototype, "findOne", null);
 __decorate([
     (0, common_1.Put)(':id'),
+    (0, access_control_1.Roles)(domain_enums_2.UserRole.ADMIN, domain_enums_2.UserRole.MANAGER, domain_enums_2.UserRole.SALES, domain_enums_2.UserRole.PURCHASING),
     __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -74,6 +78,7 @@ __decorate([
 ], ContactsController.prototype, "update", null);
 __decorate([
     (0, common_1.Delete)(':id'),
+    (0, access_control_1.Roles)(domain_enums_2.UserRole.ADMIN, domain_enums_2.UserRole.MANAGER, domain_enums_2.UserRole.SALES, domain_enums_2.UserRole.PURCHASING),
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),
     __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __metadata("design:type", Function),
@@ -82,7 +87,8 @@ __decorate([
 ], ContactsController.prototype, "remove", null);
 exports.ContactsController = ContactsController = __decorate([
     (0, common_1.Controller)('contacts'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, access_control_1.CenterAccessGuard, access_control_1.RolesGuard),
+    (0, access_control_1.Roles)(domain_enums_2.UserRole.ADMIN, domain_enums_2.UserRole.MANAGER, domain_enums_2.UserRole.SALES, domain_enums_2.UserRole.PURCHASING, domain_enums_2.UserRole.FINANCIAL, domain_enums_2.UserRole.STOCK, domain_enums_2.UserRole.OPERATOR),
     __metadata("design:paramtypes", [contacts_service_1.ContactsService])
 ], ContactsController);
 //# sourceMappingURL=contacts.controller.js.map

@@ -28,6 +28,7 @@ export class ProductsService {
   async create(dto: CreateProductDto) {
     const tenantId = TenantContextService.getTenantId();
     const userId = TenantContextService.getUserId();
+    const centerId = TenantContextService.getCenterId();
 
     // 1. Verifica unicidade de SKU no Tenant
     const existingSku = await this.prisma.client.product.findFirst({
@@ -70,6 +71,7 @@ export class ProductsService {
 
       // Se houver saldo inicial e for produto físico
       if (dto.type === ProductType.PRODUCT && initialStock.greaterThan(0)) {
+        await tx.centerStock.create({ data: { tenantId, centerId, productId: product.id, quantity: initialStock } });
         let initialBatch: any = null;
 
         // Se o produto for controlado por lote, registra o lote inicial
@@ -78,6 +80,7 @@ export class ProductsService {
           initialBatch = await tx.productBatch.create({
             data: {
               tenantId,
+              centerId,
               productId: product.id,
               batchCode,
               expirationDate: dto.initialBatchExpiration
@@ -92,6 +95,7 @@ export class ProductsService {
         await tx.stockMovement.create({
           data: {
             tenantId,
+            centerId,
             productId: product.id,
             batchId: initialBatch?.id || null,
             movementTypeCode: MovementTypeCode.IN_PURCHASE,
@@ -121,6 +125,7 @@ export class ProductsService {
     search?: string;
   }) {
     const tenantId = TenantContextService.getTenantId();
+    const centerId = TenantContextService.getCenterId();
 
     const where: Prisma.ProductWhereInput = {
       tenantId,
@@ -139,7 +144,9 @@ export class ProductsService {
     const products = await this.prisma.client.product.findMany({
       where,
       include: {
+        centerStocks: { where: { centerId }, select: { quantity: true } },
         batches: {
+          where: { centerId },
           select: { id: true, batchCode: true, expirationDate: true, quantity: true },
         },
       },
@@ -147,12 +154,10 @@ export class ProductsService {
     });
 
     if (params.lowStockOnly) {
-      return products.filter((p: any) =>
-        new Prisma.Decimal(p.stockQuantity).lessThanOrEqualTo(new Prisma.Decimal(p.minStock)),
-      );
+      return products.filter((p: any) => new Prisma.Decimal(p.centerStocks[0]?.quantity ?? 0).lessThanOrEqualTo(new Prisma.Decimal(p.minStock)));
     }
 
-    return products;
+    return products.map((product: any) => ({ ...product, currentStock: product.centerStocks[0]?.quantity ?? new Prisma.Decimal(0) }));
   }
 
   /**
@@ -160,13 +165,16 @@ export class ProductsService {
    */
   async findOne(id: string) {
     const tenantId = TenantContextService.getTenantId();
+    const centerId = TenantContextService.getCenterId();
 
     const product = await this.prisma.client.product.findFirst({
       where: { id, tenantId },
       include: {
         batches: {
+          where: { centerId },
           orderBy: [{ expirationDate: 'asc' }, { createdAt: 'desc' }],
         },
+        centerStocks: { where: { centerId }, select: { quantity: true } },
         _count: {
           select: {
             salesOrderItems: true,
@@ -182,7 +190,7 @@ export class ProductsService {
       throw new NotFoundException(`Produto com ID ${id} não encontrado.`);
     }
 
-    return product;
+    return { ...product, currentStock: product.centerStocks[0]?.quantity ?? new Prisma.Decimal(0) };
   }
 
   /**

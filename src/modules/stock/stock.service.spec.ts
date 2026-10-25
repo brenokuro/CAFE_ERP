@@ -13,13 +13,17 @@ describe('StockService - Motor de Movimentações e Regras de Negócio', () => {
 
   const mockTenantId = 'tenant-123';
   const mockUserId = 'user-456';
+  const mockCenterId = 'center-789';
 
   beforeEach(() => {
     jest.spyOn(TenantContextService, 'getTenantId').mockReturnValue(mockTenantId);
     jest.spyOn(TenantContextService, 'getUserId').mockReturnValue(mockUserId);
+    jest.spyOn(TenantContextService, 'getCenterId').mockReturnValue(mockCenterId);
 
     mockPrisma = {
-      $transaction: jest.fn(async (cb) => cb({})),
+      $transaction: jest.fn(async (cb) => cb({
+        centerStock: { findUnique: jest.fn().mockResolvedValue({ quantity: new Prisma.Decimal(5) }) },
+      })),
     };
 
     mockRepo = {
@@ -121,11 +125,12 @@ describe('StockService - Motor de Movimentações e Regras de Negócio', () => {
         quantity: 5.0,
       });
 
-      expect(mockRepo.updateProductStock).toHaveBeenCalledWith(
-        'prod-1',
-        expect.objectContaining({ s: 1, e: 1, d: [15] }),
-        expect.anything(),
-      );
+      const [updatedProductId, nextGlobalStock, nextCenterStock, tenantId, centerId] = mockRepo.updateProductStock.mock.calls[0];
+      expect(updatedProductId).toBe('prod-1');
+      expect(nextGlobalStock.toString()).toBe('15');
+      expect(nextCenterStock.toString()).toBe('10');
+      expect(tenantId).toBe(mockTenantId);
+      expect(centerId).toBe(mockCenterId);
     });
   });
 

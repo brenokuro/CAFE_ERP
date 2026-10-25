@@ -1,21 +1,14 @@
 // src/modules/auth/auth.service.ts
 import {
   BadRequestException,
-  ConflictException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../common/database/prisma.service';
-import { RegisterDto } from './dto/register.dto';
 import { AuthResponseDto, LoginDto } from './dto/login.dto';
-import {
-  AccountCategoryType,
-  BankAccountType,
-  TenantStatus,
-  UserRole,
-} from '../../common/enums/domain.enums';
+import { TenantStatus } from '../../common/enums/domain.enums';
 
 @Injectable()
 export class AuthService {
@@ -23,122 +16,6 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
   ) {}
-
-  /**
-   * Registra uma nova empresa (Tenant) e o primeiro Usuário Administrador de forma atômica.
-   * Cria também estruturas padrão de inicialização (Caixa Geral e Categorias básicas).
-   */
-  async register(dto: RegisterDto): Promise<AuthResponseDto> {
-    // 1. Verifica duplicidade de documento
-    const existingTenant = await this.prisma.tenant.findUnique({
-      where: { document: dto.companyDocument },
-    });
-
-    if (existingTenant) {
-      throw new ConflictException('Já existe uma empresa cadastrada com este CNPJ/CPF.');
-    }
-
-    // 2. Hash da senha com salt
-    const saltRounds = 10;
-    const passwordHash = await bcrypt.hash(dto.adminPassword, saltRounds);
-
-    // 3. Execução transacional ACID
-    const result = await this.prisma.$transaction(async (tx) => {
-      // 3.1 Criação do Tenant
-      const tenant = await tx.tenant.create({
-        data: {
-          name: dto.companyName,
-          tradeName: dto.companyTradeName || dto.companyName,
-          document: dto.companyDocument,
-          taxRegime: dto.taxRegime,
-          email: dto.companyEmail,
-          phone: dto.companyPhone,
-          status: TenantStatus.ACTIVE,
-        },
-      });
-
-      // 3.2 Criação do Usuário Administrador
-      const user = await tx.user.create({
-        data: {
-          tenantId: tenant.id,
-          name: dto.adminName,
-          email: dto.adminEmail.toLowerCase().trim(),
-          passwordHash,
-          role: UserRole.ADMIN,
-          active: true,
-        },
-      });
-
-      // 3.3 Inicializa Conta Bancária padrão (Caixa Geral da Empresa)
-      await tx.bankAccount.create({
-        data: {
-          tenantId: tenant.id,
-          name: 'Caixa Geral / Principal',
-          accountType: BankAccountType.CASH_REGISTER,
-          initialBalance: 0,
-          currentBalance: 0,
-          active: true,
-        },
-      });
-
-      // 3.4 Inicializa Plano de Contas básico para PME
-      await tx.chartOfAccount.createMany({
-        data: [
-          {
-            tenantId: tenant.id,
-            code: '1.01',
-            name: 'Receita com Vendas de Mercadorias',
-            type: AccountCategoryType.REVENUE,
-          },
-          {
-            tenantId: tenant.id,
-            code: '1.02',
-            name: 'Receita de Serviços Prestados',
-            type: AccountCategoryType.REVENUE,
-          },
-          {
-            tenantId: tenant.id,
-            code: '2.01',
-            name: 'Custos com Mercadorias e Insumos',
-            type: AccountCategoryType.EXPENSE,
-          },
-          {
-            tenantId: tenant.id,
-            code: '2.02',
-            name: 'Despesas Operacionais e Administrativas',
-            type: AccountCategoryType.EXPENSE,
-          },
-        ],
-      });
-
-      return { tenant, user };
-    });
-
-    // 4. Emissão do Token JWT
-    const payload = {
-      sub: result.user.id,
-      tenantId: result.tenant.id,
-      email: result.user.email,
-      role: result.user.role,
-    };
-
-    const accessToken = this.jwtService.sign(payload);
-
-    return {
-      accessToken,
-      user: {
-        id: result.user.id,
-        name: result.user.name,
-        email: result.user.email,
-        role: result.user.role,
-      },
-      tenant: {
-        id: result.tenant.id,
-        name: result.tenant.name,
-        document: result.tenant.document,
-      },
-    };
-  }
 
   /**
    * Autentica o usuário validando credenciais, tenant ativo e senha criptografada.
@@ -191,6 +68,7 @@ export class AuthService {
       tenantId: user.tenantId,
       email: user.email,
       role: user.role,
+      isPrimaryAdmin: user.isPrimaryAdmin,
     };
 
     const accessToken = this.jwtService.sign(payload);
@@ -202,12 +80,32 @@ export class AuthService {
         name: user.name,
         email: user.email,
         role: user.role,
+        isPrimaryAdmin: user.isPrimaryAdmin,
       },
       tenant: {
         id: user.tenant.id,
         name: user.tenant.name,
         document: user.tenant.document,
       },
+    };
+  }
+
+  async getCurrentUser(userId: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, active: true },
+      include: {
+        tenant: true,
+        userCenters: { where: { center: { active: true } }, include: { center: true } },
+      },
+    });
+    if (!user) throw new UnauthorizedException('Usuário inativo ou não encontrado.');
+    const centers = user.isPrimaryAdmin
+      ? await this.prisma.center.findMany({ where: { tenantId: user.tenantId, active: true }, orderBy: { name: 'asc' } })
+      : user.userCenters.map((membership) => membership.center);
+    return {
+      user: { id: user.id, name: user.name, email: user.email, role: user.role, isPrimaryAdmin: user.isPrimaryAdmin },
+      tenant: { id: user.tenant.id, name: user.tenant.name, document: user.tenant.document },
+      centers: centers.map(({ id, name, active }) => ({ id, name, active })),
     };
   }
 }

@@ -16,5 +16,5 @@ declare global {
     }
 }
 export declare class TenantMiddleware implements NestMiddleware {
-    use(req: Request, res: Response, next: NextFunction): void;
+    use(_req: Request, _res: Response, next: NextFunction): void;
 }

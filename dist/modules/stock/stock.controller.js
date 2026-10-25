@@ -18,6 +18,8 @@ const stock_service_1 = require("./stock.service");
 const create_stock_movement_dto_1 = require("./dto/create-stock-movement.dto");
 const create_batch_dto_1 = require("./dto/create-batch.dto");
 const jwt_auth_guard_1 = require("../../common/guards/jwt-auth.guard");
+const access_control_1 = require("../../common/guards/access-control");
+const domain_enums_1 = require("../../common/enums/domain.enums");
 let StockController = class StockController {
     stockService;
     constructor(stockService) {
@@ -80,7 +82,8 @@ __decorate([
 ], StockController.prototype, "createBatch", null);
 exports.StockController = StockController = __decorate([
     (0, common_1.Controller)('stock'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, access_control_1.CenterAccessGuard, access_control_1.RolesGuard),
+    (0, access_control_1.Roles)(domain_enums_1.UserRole.ADMIN, domain_enums_1.UserRole.MANAGER, domain_enums_1.UserRole.STOCK),
     __metadata("design:paramtypes", [stock_service_1.StockService])
 ], StockController);
 //# sourceMappingURL=stock.controller.js.map

@@ -17,13 +17,17 @@ import { CategoriesService } from './categories.service';
 import { CreateCategoryDto, UpdateCategoryDto } from './dto/create-category.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { AccountCategoryType } from '../../common/enums/domain.enums';
+import { CenterAccessGuard, Roles, RolesGuard } from '../../common/guards/access-control';
+import { UserRole } from '../../common/enums/domain.enums';
 
 @Controller('categories')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, CenterAccessGuard, RolesGuard)
+@Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.FINANCIAL, UserRole.SALES, UserRole.PURCHASING, UserRole.STOCK, UserRole.OPERATOR)
 export class CategoriesController {
   constructor(private readonly categoriesService: CategoriesService) {}
 
   @Post()
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.FINANCIAL)
   @HttpCode(HttpStatus.CREATED)
   async create(@Body() dto: CreateCategoryDto) {
     return this.categoriesService.create(dto);
@@ -40,6 +44,7 @@ export class CategoriesController {
   }
 
   @Put(':id')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.FINANCIAL)
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateCategoryDto,
@@ -48,6 +53,7 @@ export class CategoriesController {
   }
 
   @Delete(':id')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.FINANCIAL)
   @HttpCode(HttpStatus.OK)
   async remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.categoriesService.remove(id);

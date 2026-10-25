@@ -12,8 +12,9 @@ import {
   LogOut,
   Building2,
   Activity,
+  Settings2,
 } from 'lucide-react';
-import { erpStore } from '../../services/api';
+import { LoginResponse } from '../../services/auth';
 
 export type ActiveTab =
   | 'overview'
@@ -23,21 +24,24 @@ export type ActiveTab =
   | 'reconciliation'
   | 'products'
   | 'stock-movements'
-  | 'contacts';
+  | 'contacts'
+  | 'admin';
 
 interface SidebarProps {
   activeTab: ActiveTab;
   onSelectTab: (tab: ActiveTab) => void;
   onLogout?: () => void;
+  user: LoginResponse['user'];
+  tenant: LoginResponse['tenant'];
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   onSelectTab,
   onLogout,
+  user,
+  tenant,
 }) => {
-  const tenant = erpStore.tenant;
-  const user = erpStore.user;
 
   const navItems: { id: ActiveTab; label: string; icon: React.ReactNode; badge?: string; group?: string }[] = [
     { id: 'overview', label: 'Visão Geral', icon: <LayoutDashboard size={16} /> },
@@ -48,6 +52,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'products', label: 'Estoque & Catálogo', icon: <Package size={16} /> },
     { id: 'stock-movements', label: 'Motor de Movimentações', icon: <Activity size={16} /> },
     { id: 'contacts', label: 'Pessoas & Contatos', icon: <Users size={16} /> },
+    ...(user.isPrimaryAdmin ? [{ id: 'admin' as ActiveTab, label: 'Usuários & Centros', icon: <Settings2 size={16} /> }] : []),
   ];
 
   return (
@@ -99,7 +104,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               }}
               title={tenant.name}
             >
-              {tenant.tradeName || tenant.name}
+              {tenant.name}
             </div>
             <div
               style={{

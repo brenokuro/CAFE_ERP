@@ -23,6 +23,7 @@ let ProductsService = class ProductsService {
     async create(dto) {
         const tenantId = tenant_context_service_1.TenantContextService.getTenantId();
         const userId = tenant_context_service_1.TenantContextService.getUserId();
+        const centerId = tenant_context_service_1.TenantContextService.getCenterId();
         const existingSku = await this.prisma.client.product.findFirst({
             where: { tenantId, sku: dto.sku },
         });
@@ -57,12 +58,14 @@ let ProductsService = class ProductsService {
                 },
             });
             if (dto.type === domain_enums_1.ProductType.PRODUCT && initialStock.greaterThan(0)) {
+                await tx.centerStock.create({ data: { tenantId, centerId, productId: product.id, quantity: initialStock } });
                 let initialBatch = null;
                 if (product.isBatchControlled) {
                     const batchCode = dto.initialBatchCode?.trim() || 'LOT-IMPLANTACAO';
                     initialBatch = await tx.productBatch.create({
                         data: {
                             tenantId,
+                            centerId,
                             productId: product.id,
                             batchCode,
                             expirationDate: dto.initialBatchExpiration
@@ -75,6 +78,7 @@ let ProductsService = class ProductsService {
                 await tx.stockMovement.create({
                     data: {
                         tenantId,
+                        centerId,
                         productId: product.id,
                         batchId: initialBatch?.id || null,
                         movementTypeCode: domain_enums_1.MovementTypeCode.IN_PURCHASE,
@@ -95,6 +99,7 @@ let ProductsService = class ProductsService {
     }
     async findAll(params) {
         const tenantId = tenant_context_service_1.TenantContextService.getTenantId();
+        const centerId = tenant_context_service_1.TenantContextService.getCenterId();
         const where = {
             tenantId,
             ...(params.type ? { type: params.type } : {}),
@@ -111,25 +116,30 @@ let ProductsService = class ProductsService {
         const products = await this.prisma.client.product.findMany({
             where,
             include: {
+                centerStocks: { where: { centerId }, select: { quantity: true } },
                 batches: {
+                    where: { centerId },
                     select: { id: true, batchCode: true, expirationDate: true, quantity: true },
                 },
             },
             orderBy: { name: 'asc' },
         });
         if (params.lowStockOnly) {
-            return products.filter((p) => new client_1.Prisma.Decimal(p.stockQuantity).lessThanOrEqualTo(new client_1.Prisma.Decimal(p.minStock)));
+            return products.filter((p) => new client_1.Prisma.Decimal(p.centerStocks[0]?.quantity ?? 0).lessThanOrEqualTo(new client_1.Prisma.Decimal(p.minStock)));
         }
-        return products;
+        return products.map((product) => ({ ...product, currentStock: product.centerStocks[0]?.quantity ?? new client_1.Prisma.Decimal(0) }));
     }
     async findOne(id) {
         const tenantId = tenant_context_service_1.TenantContextService.getTenantId();
+        const centerId = tenant_context_service_1.TenantContextService.getCenterId();
         const product = await this.prisma.client.product.findFirst({
             where: { id, tenantId },
             include: {
                 batches: {
+                    where: { centerId },
                     orderBy: [{ expirationDate: 'asc' }, { createdAt: 'desc' }],
                 },
+                centerStocks: { where: { centerId }, select: { quantity: true } },
                 _count: {
                     select: {
                         salesOrderItems: true,
@@ -143,7 +153,7 @@ let ProductsService = class ProductsService {
         if (!product) {
             throw new common_1.NotFoundException(`Produto com ID ${id} não encontrado.`);
         }
-        return product;
+        return { ...product, currentStock: product.centerStocks[0]?.quantity ?? new client_1.Prisma.Decimal(0) };
     }
     async update(id, dto) {
         const existing = await this.findOne(id);

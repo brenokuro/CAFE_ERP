@@ -19,6 +19,8 @@ const banking_module_1 = require("./modules/banking/banking.module");
 const stock_module_1 = require("./modules/stock/stock.module");
 const prisma_service_1 = require("./common/database/prisma.service");
 const tenant_middleware_1 = require("./common/multitenancy/tenant.middleware");
+const access_module_1 = require("./common/guards/access.module");
+const admin_module_1 = require("./modules/admin/admin.module");
 let AppModule = class AppModule {
     configure(consumer) {
         consumer.apply(tenant_middleware_1.TenantMiddleware).forRoutes('*');
@@ -28,6 +30,8 @@ exports.AppModule = AppModule;
 exports.AppModule = AppModule = __decorate([
     (0, common_1.Module)({
         imports: [
+            access_module_1.AccessModule,
+            admin_module_1.AdminModule,
             auth_module_1.AuthModule,
             contacts_module_1.ContactsModule,
             products_module_1.ProductsModule,

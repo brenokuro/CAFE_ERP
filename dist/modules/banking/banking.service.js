@@ -21,10 +21,12 @@ let BankingService = class BankingService {
     }
     async createAccount(dto) {
         const tenantId = tenant_context_service_1.TenantContextService.getTenantId();
+        const centerId = tenant_context_service_1.TenantContextService.getCenterId();
         const initialBalance = new client_1.Prisma.Decimal(dto.initialBalance || 0);
         return this.prisma.client.bankAccount.create({
             data: {
                 tenantId,
+                centerId,
                 name: dto.name,
                 bankCode: dto.bankCode,
                 bankName: dto.bankName,
@@ -39,8 +41,9 @@ let BankingService = class BankingService {
     }
     async findAllAccounts() {
         const tenantId = tenant_context_service_1.TenantContextService.getTenantId();
+        const centerId = tenant_context_service_1.TenantContextService.getCenterId();
         return this.prisma.client.bankAccount.findMany({
-            where: { tenantId },
+            where: { tenantId, centerId },
             include: {
                 _count: { select: { transactions: true } },
             },
@@ -49,17 +52,26 @@ let BankingService = class BankingService {
     }
     async createTransaction(dto) {
         const tenantId = tenant_context_service_1.TenantContextService.getTenantId();
+        const centerId = tenant_context_service_1.TenantContextService.getCenterId();
         const bankAccount = await this.prisma.client.bankAccount.findFirst({
-            where: { id: dto.bankAccountId, tenantId },
+            where: { id: dto.bankAccountId, tenantId, centerId },
         });
         if (!bankAccount || !bankAccount.active) {
             throw new common_1.NotFoundException('Conta bancária não encontrada ou inativa.');
+        }
+        if (dto.financialRecordId) {
+            const record = await this.prisma.client.financialRecord.findFirst({
+                where: { id: dto.financialRecordId, tenantId, centerId }, select: { id: true },
+            });
+            if (!record)
+                throw new common_1.NotFoundException('Título financeiro não pertence ao centro selecionado.');
         }
         const amount = new client_1.Prisma.Decimal(dto.amount);
         return this.prisma.$transaction(async (tx) => {
             const transaction = await tx.bankTransaction.create({
                 data: {
                     tenantId,
+                    centerId,
                     bankAccountId: dto.bankAccountId,
                     type: dto.type,
                     amount,
@@ -83,9 +95,11 @@ let BankingService = class BankingService {
     }
     async findTransactions(bankAccountId, reconciled) {
         const tenantId = tenant_context_service_1.TenantContextService.getTenantId();
+        const centerId = tenant_context_service_1.TenantContextService.getCenterId();
         return this.prisma.client.bankTransaction.findMany({
             where: {
                 tenantId,
+                centerId,
                 bankAccountId,
                 ...(reconciled !== undefined ? { reconciled } : {}),
             },

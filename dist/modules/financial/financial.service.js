@@ -22,10 +22,22 @@ let FinancialService = class FinancialService {
     }
     async createRecord(dto) {
         const tenantId = tenant_context_service_1.TenantContextService.getTenantId();
+        const centerId = tenant_context_service_1.TenantContextService.getCenterId();
+        if (dto.salesOrderId) {
+            const order = await this.prisma.client.salesOrder.findFirst({ where: { id: dto.salesOrderId, tenantId, centerId } });
+            if (!order)
+                throw new common_1.NotFoundException('Venda não pertence ao centro selecionado.');
+        }
+        if (dto.purchaseOrderId) {
+            const order = await this.prisma.client.purchaseOrder.findFirst({ where: { id: dto.purchaseOrderId, tenantId, centerId } });
+            if (!order)
+                throw new common_1.NotFoundException('Compra não pertence ao centro selecionado.');
+        }
         const originalAmount = new client_1.Prisma.Decimal(dto.originalAmount);
         return this.prisma.client.financialRecord.create({
             data: {
                 tenantId,
+                centerId,
                 type: dto.type,
                 status: domain_enums_1.FinancialRecordStatus.PENDING,
                 description: dto.description,
@@ -50,9 +62,10 @@ let FinancialService = class FinancialService {
     }
     async settleRecord(recordId, dto) {
         const tenantId = tenant_context_service_1.TenantContextService.getTenantId();
+        const centerId = tenant_context_service_1.TenantContextService.getCenterId();
         return this.prisma.$transaction(async (tx) => {
             const record = await tx.financialRecord.findFirst({
-                where: { id: recordId, tenantId },
+                where: { id: recordId, tenantId, centerId },
             });
             if (!record) {
                 throw new common_1.NotFoundException('Título financeiro não encontrado.');
@@ -61,7 +74,7 @@ let FinancialService = class FinancialService {
                 throw new common_1.BadRequestException('Este título já está totalmente quitado.');
             }
             const bankAccount = await tx.bankAccount.findFirst({
-                where: { id: dto.bankAccountId, tenantId },
+                where: { id: dto.bankAccountId, tenantId, centerId },
             });
             if (!bankAccount || !bankAccount.active) {
                 throw new common_1.NotFoundException('Conta bancária informada não foi encontrada ou está inativa.');
@@ -98,6 +111,7 @@ let FinancialService = class FinancialService {
             const bankTx = await tx.bankTransaction.create({
                 data: {
                     tenantId,
+                    centerId,
                     bankAccountId: bankAccount.id,
                     financialRecordId: record.id,
                     type: txType,
@@ -125,9 +139,10 @@ let FinancialService = class FinancialService {
     }
     async reconcile(dto) {
         const tenantId = tenant_context_service_1.TenantContextService.getTenantId();
+        const centerId = tenant_context_service_1.TenantContextService.getCenterId();
         return this.prisma.$transaction(async (tx) => {
             const bankTx = await tx.bankTransaction.findFirst({
-                where: { id: dto.bankTransactionId, tenantId },
+                where: { id: dto.bankTransactionId, tenantId, centerId },
                 include: { bankAccount: true },
             });
             if (!bankTx) {
@@ -137,7 +152,7 @@ let FinancialService = class FinancialService {
                 throw new common_1.ConflictException('Esta transação bancária já se encontra conciliada.');
             }
             const record = await tx.financialRecord.findFirst({
-                where: { id: dto.financialRecordId, tenantId },
+                where: { id: dto.financialRecordId, tenantId, centerId },
             });
             if (!record) {
                 throw new common_1.NotFoundException('Título financeiro não encontrado.');
@@ -193,16 +208,18 @@ let FinancialService = class FinancialService {
     }
     async getCashFlow(params) {
         const tenantId = tenant_context_service_1.TenantContextService.getTenantId();
+        const centerId = tenant_context_service_1.TenantContextService.getCenterId();
         const today = new Date();
         const start = params?.startDate ? new Date(params.startDate) : new Date(today.getFullYear(), today.getMonth(), 1);
         const end = params?.endDate ? new Date(params.endDate) : new Date(today.getFullYear(), today.getMonth() + 2, 0);
         const bankAccounts = await this.prisma.client.bankAccount.findMany({
-            where: { tenantId, active: true },
+            where: { tenantId, centerId, active: true },
         });
         const currentAvailableBalance = bankAccounts.reduce((acc, accItem) => acc.add(new client_1.Prisma.Decimal(accItem.currentBalance)), new client_1.Prisma.Decimal(0));
         const records = await this.prisma.client.financialRecord.findMany({
             where: {
                 tenantId,
+                centerId,
                 dueDate: {
                     gte: start,
                     lte: end,
@@ -282,8 +299,10 @@ let FinancialService = class FinancialService {
     }
     async findAllRecords(params) {
         const tenantId = tenant_context_service_1.TenantContextService.getTenantId();
+        const centerId = tenant_context_service_1.TenantContextService.getCenterId();
         const where = {
             tenantId,
+            centerId,
             ...(params.type ? { type: params.type } : {}),
             ...(params.status ? { status: params.status } : {}),
             ...(params.contactId ? { contactId: params.contactId } : {}),
@@ -308,8 +327,9 @@ let FinancialService = class FinancialService {
     }
     async findOneRecord(id) {
         const tenantId = tenant_context_service_1.TenantContextService.getTenantId();
+        const centerId = tenant_context_service_1.TenantContextService.getCenterId();
         const record = await this.prisma.client.financialRecord.findFirst({
-            where: { id, tenantId },
+            where: { id, tenantId, centerId },
             include: {
                 contact: true,
                 chartOfAccount: true,

@@ -22,99 +22,6 @@ let AuthService = class AuthService {
         this.prisma = prisma;
         this.jwtService = jwtService;
     }
-    async register(dto) {
-        const existingTenant = await this.prisma.tenant.findUnique({
-            where: { document: dto.companyDocument },
-        });
-        if (existingTenant) {
-            throw new common_1.ConflictException('Já existe uma empresa cadastrada com este CNPJ/CPF.');
-        }
-        const saltRounds = 10;
-        const passwordHash = await bcrypt.hash(dto.adminPassword, saltRounds);
-        const result = await this.prisma.$transaction(async (tx) => {
-            const tenant = await tx.tenant.create({
-                data: {
-                    name: dto.companyName,
-                    tradeName: dto.companyTradeName || dto.companyName,
-                    document: dto.companyDocument,
-                    taxRegime: dto.taxRegime,
-                    email: dto.companyEmail,
-                    phone: dto.companyPhone,
-                    status: domain_enums_1.TenantStatus.ACTIVE,
-                },
-            });
-            const user = await tx.user.create({
-                data: {
-                    tenantId: tenant.id,
-                    name: dto.adminName,
-                    email: dto.adminEmail.toLowerCase().trim(),
-                    passwordHash,
-                    role: domain_enums_1.UserRole.ADMIN,
-                    active: true,
-                },
-            });
-            await tx.bankAccount.create({
-                data: {
-                    tenantId: tenant.id,
-                    name: 'Caixa Geral / Principal',
-                    accountType: domain_enums_1.BankAccountType.CASH_REGISTER,
-                    initialBalance: 0,
-                    currentBalance: 0,
-                    active: true,
-                },
-            });
-            await tx.chartOfAccount.createMany({
-                data: [
-                    {
-                        tenantId: tenant.id,
-                        code: '1.01',
-                        name: 'Receita com Vendas de Mercadorias',
-                        type: domain_enums_1.AccountCategoryType.REVENUE,
-                    },
-                    {
-                        tenantId: tenant.id,
-                        code: '1.02',
-                        name: 'Receita de Serviços Prestados',
-                        type: domain_enums_1.AccountCategoryType.REVENUE,
-                    },
-                    {
-                        tenantId: tenant.id,
-                        code: '2.01',
-                        name: 'Custos com Mercadorias e Insumos',
-                        type: domain_enums_1.AccountCategoryType.EXPENSE,
-                    },
-                    {
-                        tenantId: tenant.id,
-                        code: '2.02',
-                        name: 'Despesas Operacionais e Administrativas',
-                        type: domain_enums_1.AccountCategoryType.EXPENSE,
-                    },
-                ],
-            });
-            return { tenant, user };
-        });
-        const payload = {
-            sub: result.user.id,
-            tenantId: result.tenant.id,
-            email: result.user.email,
-            role: result.user.role,
-        };
-        const accessToken = this.jwtService.sign(payload);
-        return {
-            accessToken,
-            user: {
-                id: result.user.id,
-                name: result.user.name,
-                email: result.user.email,
-                role: result.user.role,
-            },
-            tenant: {
-                id: result.tenant.id,
-                name: result.tenant.name,
-                document: result.tenant.document,
-            },
-        };
-    }
     async login(dto) {
         const email = dto.email.toLowerCase().trim();
         const users = await this.prisma.user.findMany({
@@ -148,6 +55,7 @@ let AuthService = class AuthService {
             tenantId: user.tenantId,
             email: user.email,
             role: user.role,
+            isPrimaryAdmin: user.isPrimaryAdmin,
         };
         const accessToken = this.jwtService.sign(payload);
         return {
@@ -157,12 +65,32 @@ let AuthService = class AuthService {
                 name: user.name,
                 email: user.email,
                 role: user.role,
+                isPrimaryAdmin: user.isPrimaryAdmin,
             },
             tenant: {
                 id: user.tenant.id,
                 name: user.tenant.name,
                 document: user.tenant.document,
             },
+        };
+    }
+    async getCurrentUser(userId) {
+        const user = await this.prisma.user.findFirst({
+            where: { id: userId, active: true },
+            include: {
+                tenant: true,
+                userCenters: { where: { center: { active: true } }, include: { center: true } },
+            },
+        });
+        if (!user)
+            throw new common_1.UnauthorizedException('Usuário inativo ou não encontrado.');
+        const centers = user.isPrimaryAdmin
+            ? await this.prisma.center.findMany({ where: { tenantId: user.tenantId, active: true }, orderBy: { name: 'asc' } })
+            : user.userCenters.map((membership) => membership.center);
+        return {
+            user: { id: user.id, name: user.name, email: user.email, role: user.role, isPrimaryAdmin: user.isPrimaryAdmin },
+            tenant: { id: user.tenant.id, name: user.tenant.name, document: user.tenant.document },
+            centers: centers.map(({ id, name, active }) => ({ id, name, active })),
         };
     }
 };

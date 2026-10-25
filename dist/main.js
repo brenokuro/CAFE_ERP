@@ -4,9 +4,16 @@ const core_1 = require("@nestjs/core");
 const common_1 = require("@nestjs/common");
 const app_module_1 = require("./app.module");
 async function bootstrap() {
+    if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
+        throw new Error('Configure JWT_SECRET com pelo menos 32 caracteres antes de iniciar a API.');
+    }
     const app = await core_1.NestFactory.create(app_module_1.AppModule);
+    const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:5173')
+        .split(',')
+        .map((origin) => origin.trim())
+        .filter(Boolean);
     app.enableCors({
-        origin: '*',
+        origin: allowedOrigins,
         methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
         credentials: true,
     });

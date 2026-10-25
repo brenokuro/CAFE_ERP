@@ -17,9 +17,12 @@ import {
   CreateBankTransactionDto,
 } from './dto/create-bank-account.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { CenterAccessGuard, Roles, RolesGuard } from '../../common/guards/access-control';
+import { UserRole } from '../../common/enums/domain.enums';
 
 @Controller('banking')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, CenterAccessGuard, RolesGuard)
+@Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.FINANCIAL)
 export class BankingController {
   constructor(private readonly bankingService: BankingService) {}
 

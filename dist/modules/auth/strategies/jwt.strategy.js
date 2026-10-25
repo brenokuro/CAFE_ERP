@@ -13,24 +13,41 @@ exports.JwtStrategy = void 0;
 const common_1 = require("@nestjs/common");
 const passport_1 = require("@nestjs/passport");
 const passport_jwt_1 = require("passport-jwt");
+const prisma_service_1 = require("../../../common/database/prisma.service");
+const domain_enums_1 = require("../../../common/enums/domain.enums");
 let JwtStrategy = class JwtStrategy extends (0, passport_1.PassportStrategy)(passport_jwt_1.Strategy) {
-    constructor() {
+    prisma;
+    constructor(prisma) {
         super({
             jwtFromRequest: passport_jwt_1.ExtractJwt.fromAuthHeaderAsBearerToken(),
             ignoreExpiration: false,
-            secretOrKey: process.env.JWT_SECRET || 'erp-pme-super-secret-key-change-in-production',
+            secretOrKey: process.env.JWT_SECRET,
         });
+        this.prisma = prisma;
     }
     async validate(payload) {
         if (!payload.sub || !payload.tenantId) {
             throw new common_1.UnauthorizedException('Payload do JWT inválido para acesso ao ERP.');
         }
-        return payload;
+        const user = await this.prisma.user.findFirst({
+            where: { id: payload.sub, tenantId: payload.tenantId, active: true },
+            include: { tenant: true },
+        });
+        if (!user || user.tenant.status !== domain_enums_1.TenantStatus.ACTIVE) {
+            throw new common_1.UnauthorizedException('Usuário inativo ou empresa sem acesso.');
+        }
+        return {
+            sub: user.id,
+            tenantId: user.tenantId,
+            email: user.email,
+            role: user.role,
+            isPrimaryAdmin: user.isPrimaryAdmin,
+        };
     }
 };
 exports.JwtStrategy = JwtStrategy;
 exports.JwtStrategy = JwtStrategy = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [])
+    __metadata("design:paramtypes", [prisma_service_1.PrismaService])
 ], JwtStrategy);
 //# sourceMappingURL=jwt.strategy.js.map

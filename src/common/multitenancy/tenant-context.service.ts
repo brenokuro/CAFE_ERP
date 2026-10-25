@@ -5,6 +5,8 @@ export interface TenantSession {
   tenantId: string;
   userId: string;
   userRole: string;
+  isPrimaryAdmin?: boolean;
+  centerId?: string;
 }
 
 /**
@@ -30,6 +32,15 @@ export class TenantContextService {
     return this.storage.getStore();
   }
 
+  /** Atualiza a sessão criada no middleware depois que o JWT foi validado. */
+  public static setSession(session: TenantSession): void {
+    const current = this.storage.getStore();
+    if (!current) {
+      throw new Error('TenantContextError: contexto da requisição não inicializado.');
+    }
+    Object.assign(current, session);
+  }
+
   /**
    * Retorna o ID do Tenant da requisição atual. Lança exceção se não houver contexto ativo.
    */
@@ -48,5 +59,13 @@ export class TenantContextService {
    */
   public static getUserId(): string | undefined {
     return this.storage.getStore()?.userId;
+  }
+
+  public static getCenterId(): string {
+    const centerId = this.storage.getStore()?.centerId;
+    if (!centerId) {
+      throw new Error('CenterContextError: nenhum centro autorizado foi selecionado.');
+    }
+    return centerId;
   }
 }

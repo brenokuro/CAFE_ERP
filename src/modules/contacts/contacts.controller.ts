@@ -18,13 +18,17 @@ import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { ContactRole } from '../../common/enums/domain.enums';
+import { CenterAccessGuard, Roles, RolesGuard } from '../../common/guards/access-control';
+import { UserRole } from '../../common/enums/domain.enums';
 
 @Controller('contacts')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, CenterAccessGuard, RolesGuard)
+@Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.SALES, UserRole.PURCHASING, UserRole.FINANCIAL, UserRole.STOCK, UserRole.OPERATOR)
 export class ContactsController {
   constructor(private readonly contactsService: ContactsService) {}
 
   @Post()
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.SALES, UserRole.PURCHASING)
   @HttpCode(HttpStatus.CREATED)
   async create(@Body() dto: CreateContactDto) {
     return this.contactsService.create(dto);
@@ -44,6 +48,7 @@ export class ContactsController {
   }
 
   @Put(':id')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.SALES, UserRole.PURCHASING)
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateContactDto,
@@ -52,6 +57,7 @@ export class ContactsController {
   }
 
   @Delete(':id')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.SALES, UserRole.PURCHASING)
   @HttpCode(HttpStatus.OK)
   async remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.contactsService.remove(id);

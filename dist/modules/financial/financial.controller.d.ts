@@ -31,29 +31,31 @@ export declare class FinancialController {
     reconcile(dto: ReconcileTransactionDto): Promise<{
         message: string;
         reconciledTransaction: {
-            tenantId: string;
             id: string;
-            createdAt: Date;
             type: import(".prisma/client").$Enums.BankTransactionType;
-            description: string;
-            bankAccountId: string;
-            financialRecordId: string | null;
             amount: import("@prisma/client/runtime/library").Decimal;
             transactionDate: Date;
+            description: string;
             reconciled: boolean;
             reconciledAt: Date | null;
             externalReferenceId: string | null;
+            createdAt: Date;
+            tenantId: string;
+            centerId: string | null;
+            bankAccountId: string;
+            financialRecordId: string | null;
         };
         updatedFinancialRecord: {
-            tenantId: string;
             id: string;
-            createdAt: Date;
-            updatedAt: Date;
-            notes: string | null;
             type: import(".prisma/client").$Enums.FinancialRecordType;
             description: string;
+            createdAt: Date;
+            tenantId: string;
+            centerId: string | null;
+            updatedAt: Date;
             status: import(".prisma/client").$Enums.FinancialRecordStatus;
             issueDate: Date;
+            notes: string | null;
             salesOrderId: string | null;
             purchaseOrderId: string | null;
             contactId: string | null;
@@ -75,15 +77,16 @@ export declare class FinancialController {
     createRecord(dto: CreateFinancialRecordDto): Promise<any>;
     settleRecord(id: string, dto: SettleFinancialRecordDto): Promise<{
         financialRecord: {
-            tenantId: string;
             id: string;
-            createdAt: Date;
-            updatedAt: Date;
-            notes: string | null;
             type: import(".prisma/client").$Enums.FinancialRecordType;
             description: string;
+            createdAt: Date;
+            tenantId: string;
+            centerId: string | null;
+            updatedAt: Date;
             status: import(".prisma/client").$Enums.FinancialRecordStatus;
             issueDate: Date;
+            notes: string | null;
             salesOrderId: string | null;
             purchaseOrderId: string | null;
             contactId: string | null;
@@ -101,18 +104,19 @@ export declare class FinancialController {
             totalInstallments: number;
         };
         bankTransaction: {
-            tenantId: string;
             id: string;
-            createdAt: Date;
             type: import(".prisma/client").$Enums.BankTransactionType;
-            description: string;
-            bankAccountId: string;
-            financialRecordId: string | null;
             amount: import("@prisma/client/runtime/library").Decimal;
             transactionDate: Date;
+            description: string;
             reconciled: boolean;
             reconciledAt: Date | null;
             externalReferenceId: string | null;
+            createdAt: Date;
+            tenantId: string;
+            centerId: string | null;
+            bankAccountId: string;
+            financialRecordId: string | null;
         };
         newAccountBalance: import("@prisma/client/runtime/library").Decimal;
     }>;

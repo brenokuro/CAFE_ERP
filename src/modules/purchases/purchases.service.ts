@@ -32,6 +32,7 @@ export class PurchasesService {
   async createPurchase(dto: CreatePurchaseOrderDto) {
     const tenantId = TenantContextService.getTenantId();
     const userId = TenantContextService.getUserId();
+    const centerId = TenantContextService.getCenterId();
 
     return this.prisma.$transaction(async (tx) => {
       // 1. Gera o próximo número sequencial de compra para este Tenant
@@ -98,6 +99,7 @@ export class PurchasesService {
       const purchaseOrder = await tx.purchaseOrder.create({
         data: {
           tenantId,
+          centerId,
           orderNumber,
           supplierId: dto.supplierId,
           status: initialStatus,
@@ -130,11 +132,12 @@ export class PurchasesService {
           categoryAccountId: dto.categoryAccountId,
           userId,
           tenantId,
+          centerId,
         });
       }
 
       return tx.purchaseOrder.findFirst({
-        where: { id: purchaseOrder.id, tenantId },
+        where: { id: purchaseOrder.id, tenantId, centerId },
         include: {
           items: { include: { product: true } },
           supplier: true,
@@ -159,10 +162,11 @@ export class PurchasesService {
   ) {
     const tenantId = TenantContextService.getTenantId();
     const userId = TenantContextService.getUserId();
+    const centerId = TenantContextService.getCenterId();
 
     return this.prisma.$transaction(async (tx) => {
       const order = await tx.purchaseOrder.findFirst({
-        where: { id: purchaseOrderId, tenantId },
+        where: { id: purchaseOrderId, tenantId, centerId },
         include: { items: { include: { product: true } } },
       });
 
@@ -185,6 +189,7 @@ export class PurchasesService {
         categoryAccountId: options?.categoryAccountId,
         userId,
         tenantId,
+        centerId,
       });
 
       await tx.purchaseOrder.update({
@@ -193,7 +198,7 @@ export class PurchasesService {
       });
 
       return tx.purchaseOrder.findFirst({
-        where: { id: order.id, tenantId },
+        where: { id: order.id, tenantId, centerId },
         include: {
           items: { include: { product: true } },
           supplier: true,
@@ -221,32 +226,42 @@ export class PurchasesService {
       categoryAccountId?: string;
       userId?: string;
       tenantId: string;
+      centerId: string;
     },
   ) {
     for (const item of order.items) {
       const product = productsMap.get(item.productId);
 
       if (product && product.type === 'PRODUCT') {
-        const currentStock = new Prisma.Decimal(product.stockQuantity ?? product.currentStock ?? 0);
+        const globalStock = new Prisma.Decimal(product.stockQuantity ?? 0);
+        const centerStock = await tx.centerStock.findUnique({ where: {
+          tenantId_centerId_productId: { tenantId: ctx.tenantId, centerId: ctx.centerId, productId: item.productId },
+        } });
+        const currentStock = new Prisma.Decimal(centerStock?.quantity ?? 0);
         const currentCostPrice = new Prisma.Decimal(product.costPrice);
         const quantityReceived = new Prisma.Decimal(item.quantity);
         const unitCostReceived = new Prisma.Decimal(item.unitCost);
 
         const newStock = currentStock.add(quantityReceived);
+        const newGlobalStock = globalStock.add(quantityReceived);
 
         // Recálculo do Custo Médio Ponderado (CMP)
         let newCostPrice = unitCostReceived;
-        if (newStock.greaterThan(0)) {
-          const currentValuation = currentStock.mul(currentCostPrice);
+        if (newGlobalStock.greaterThan(0)) {
+          const currentValuation = globalStock.mul(currentCostPrice);
           const incomingValuation = quantityReceived.mul(unitCostReceived);
-          newCostPrice = currentValuation.add(incomingValuation).div(newStock).toDecimalPlaces(4);
+          newCostPrice = currentValuation.add(incomingValuation).div(newGlobalStock).toDecimalPlaces(4);
         }
 
-        // Atualiza produto no catálogo
+        await tx.centerStock.upsert({
+          where: { tenantId_centerId_productId: { tenantId: ctx.tenantId, centerId: ctx.centerId, productId: item.productId } },
+          create: { tenantId: ctx.tenantId, centerId: ctx.centerId, productId: item.productId, quantity: newStock },
+          update: { quantity: newStock },
+        });
         await tx.product.update({
           where: { id: item.productId },
           data: {
-            stockQuantity: newStock,
+            stockQuantity: newGlobalStock,
             costPrice: newCostPrice,
           },
         });
@@ -255,6 +270,7 @@ export class PurchasesService {
         await tx.stockMovement.create({
           data: {
             tenantId: ctx.tenantId,
+            centerId: ctx.centerId,
             productId: item.productId,
             movementTypeCode: MovementTypeCode.IN_PURCHASE,
             quantity: quantityReceived,
@@ -292,6 +308,7 @@ export class PurchasesService {
       await tx.financialRecord.create({
         data: {
           tenantId: ctx.tenantId,
+          centerId: ctx.centerId,
           type: FinancialRecordType.PAYABLE,
           status: FinancialRecordStatus.PENDING,
           description: `Compra #${order.orderNumber} ${order.invoiceNumber ? `(NF-e ${order.invoiceNumber})` : ''} - Parcela ${i}/${installments}`,
@@ -315,10 +332,12 @@ export class PurchasesService {
    */
   async findAll(status?: PurchaseOrderStatus) {
     const tenantId = TenantContextService.getTenantId();
+    const centerId = TenantContextService.getCenterId();
 
     return this.prisma.client.purchaseOrder.findMany({
       where: {
         tenantId,
+        centerId,
         ...(status ? { status } : {}),
       },
       include: {
@@ -335,9 +354,10 @@ export class PurchasesService {
    */
   async findOne(id: string) {
     const tenantId = TenantContextService.getTenantId();
+    const centerId = TenantContextService.getCenterId();
 
     const order = await this.prisma.client.purchaseOrder.findFirst({
-      where: { id, tenantId },
+      where: { id, tenantId, centerId },
       include: {
         supplier: true,
         items: { include: { product: true } },

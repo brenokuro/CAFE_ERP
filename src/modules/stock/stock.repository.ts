@@ -39,11 +39,12 @@ export class StockRepository {
     batchId: string,
     productId: string,
     tenantId: string,
+    centerId: string,
     tx?: Prisma.TransactionClient,
   ) {
     const client = this.getClient(tx);
     return client.productBatch.findFirst({
-      where: { id: batchId, productId, tenantId },
+      where: { id: batchId, productId, tenantId, centerId },
     });
   }
 
@@ -54,12 +55,14 @@ export class StockRepository {
     productId: string,
     batchCode: string,
     tenantId: string,
+    centerId: string,
     tx?: Prisma.TransactionClient,
   ) {
     const client = this.getClient(tx);
     return client.productBatch.findFirst({
       where: {
         tenantId,
+        centerId,
         productId,
         batchCode: batchCode.trim(),
       },
@@ -74,12 +77,14 @@ export class StockRepository {
   async findActiveBatchesFifo(
     productId: string,
     tenantId: string,
+    centerId: string,
     tx?: Prisma.TransactionClient,
   ) {
     const client = this.getClient(tx);
     return client.productBatch.findMany({
       where: {
         tenantId,
+        centerId,
         productId,
         quantity: { gt: 0 },
       },
@@ -96,6 +101,7 @@ export class StockRepository {
   async createBatch(
     data: {
       tenantId: string;
+      centerId: string;
       productId: string;
       batchCode: string;
       expirationDate: Date | null;
@@ -129,14 +135,19 @@ export class StockRepository {
    */
   async updateProductStock(
     productId: string,
-    newStock: Prisma.Decimal,
+    globalStock: Prisma.Decimal,
+    centerStock: Prisma.Decimal,
+    tenantId: string,
+    centerId: string,
     tx?: Prisma.TransactionClient,
   ) {
     const client = this.getClient(tx);
-    return client.product.update({
-      where: { id: productId },
-      data: { stockQuantity: newStock },
+    await client.centerStock.upsert({
+      where: { tenantId_centerId_productId: { tenantId, centerId, productId } },
+      create: { tenantId, centerId, productId, quantity: centerStock },
+      update: { quantity: centerStock },
     });
+    return client.product.update({ where: { id: productId }, data: { stockQuantity: globalStock } });
   }
 
   /**
@@ -166,13 +177,14 @@ export class StockRepository {
   /**
    * Consulta histórico de movimentações com paginação e filtros auditáveis
    */
-  async findMovementsPaginated(tenantId: string, filters: StockMovementQueryDto) {
+  async findMovementsPaginated(tenantId: string, centerId: string, filters: StockMovementQueryDto) {
     const page = Math.max(1, Number(filters.page) || 1);
     const limit = Math.max(1, Math.min(100, Number(filters.limit) || 20));
     const skip = (page - 1) * limit;
 
     const where: Prisma.StockMovementWhereInput = {
       tenantId,
+      centerId,
       ...(filters.productId ? { productId: filters.productId } : {}),
       ...(filters.movementTypeCode ? { movementTypeCode: filters.movementTypeCode } : {}),
       ...(filters.userId ? { userId: filters.userId } : {}),
@@ -236,9 +248,9 @@ export class StockRepository {
   /**
    * Consulta os lotes e validades de um determinado produto
    */
-  async findBatchesByProductId(productId: string, tenantId: string) {
+  async findBatchesByProductId(productId: string, tenantId: string, centerId: string) {
     return this.prisma.client.productBatch.findMany({
-      where: { tenantId, productId },
+      where: { tenantId, productId, centerId },
       orderBy: [{ expirationDate: 'asc' }, { createdAt: 'desc' }],
     });
   }

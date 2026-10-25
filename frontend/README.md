@@ -1,32 +1,7 @@
-# React + TypeScript + Vite
+# CAFE ERP — Interface
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Aplicação React + Vite. Para executar, instale as dependências (`npm ci`) e rode `npm run dev` com a API disponível em `http://localhost:3000/api/v1`.
 
-Currently, two official plugins are available:
+Configure `VITE_API_URL` para apontar a interface a outra URL de API. O login usa `/auth/login`; o seletor de centros carrega os centros autorizados e envia o centro selecionado no cabeçalho `X-Center-ID`. A área de administração permite gerenciar usuários, papéis, centros e atribuições.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
-```
-
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+As telas operacionais ainda usam dados demonstrativos locais em memória; suas alterações não são persistidas no backend.

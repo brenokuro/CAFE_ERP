@@ -17,9 +17,12 @@ import {
 } from './dto/create-stock-movement.dto';
 import { CreateProductBatchDto } from './dto/create-batch.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { CenterAccessGuard, Roles, RolesGuard } from '../../common/guards/access-control';
+import { UserRole } from '../../common/enums/domain.enums';
 
 @Controller('stock')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, CenterAccessGuard, RolesGuard)
+@Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.STOCK)
 export class StockController {
   constructor(private readonly stockService: StockService) {}
 

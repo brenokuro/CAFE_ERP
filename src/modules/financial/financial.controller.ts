@@ -22,9 +22,12 @@ import {
   FinancialRecordStatus,
   FinancialRecordType,
 } from '../../common/enums/domain.enums';
+import { CenterAccessGuard, Roles, RolesGuard } from '../../common/guards/access-control';
+import { UserRole } from '../../common/enums/domain.enums';
 
 @Controller('financial')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, CenterAccessGuard, RolesGuard)
+@Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.FINANCIAL)
 export class FinancialController {
   constructor(private readonly financialService: FinancialService) {}
 

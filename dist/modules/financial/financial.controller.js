@@ -19,6 +19,8 @@ const create_financial_record_dto_1 = require("./dto/create-financial-record.dto
 const create_bank_account_dto_1 = require("../banking/dto/create-bank-account.dto");
 const jwt_auth_guard_1 = require("../../common/guards/jwt-auth.guard");
 const domain_enums_1 = require("../../common/enums/domain.enums");
+const access_control_1 = require("../../common/guards/access-control");
+const domain_enums_2 = require("../../common/enums/domain.enums");
 let FinancialController = class FinancialController {
     financialService;
     constructor(financialService) {
@@ -103,7 +105,8 @@ __decorate([
 ], FinancialController.prototype, "findOneRecord", null);
 exports.FinancialController = FinancialController = __decorate([
     (0, common_1.Controller)('financial'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, access_control_1.CenterAccessGuard, access_control_1.RolesGuard),
+    (0, access_control_1.Roles)(domain_enums_2.UserRole.ADMIN, domain_enums_2.UserRole.MANAGER, domain_enums_2.UserRole.FINANCIAL),
     __metadata("design:paramtypes", [financial_service_1.FinancialService])
 ], FinancialController);
 //# sourceMappingURL=financial.controller.js.map

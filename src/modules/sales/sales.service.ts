@@ -32,6 +32,7 @@ export class SalesService {
   async createOrder(dto: CreateSalesOrderDto) {
     const tenantId = TenantContextService.getTenantId();
     const userId = TenantContextService.getUserId();
+    const centerId = TenantContextService.getCenterId();
 
     return this.prisma.$transaction(async (tx) => {
       // 1. Gera o próximo número legível de pedido para este Tenant
@@ -95,6 +96,7 @@ export class SalesService {
       const salesOrder = await tx.salesOrder.create({
         data: {
           tenantId,
+          centerId,
           orderNumber,
           customerId: dto.customerId,
           status: initialStatus,
@@ -123,12 +125,13 @@ export class SalesService {
           categoryAccountId: dto.categoryAccountId,
           userId,
           tenantId,
+          centerId,
         });
       }
 
       // Retorna pedido com todas as relações atualizadas
       return tx.salesOrder.findFirst({
-        where: { id: salesOrder.id, tenantId },
+        where: { id: salesOrder.id, tenantId, centerId },
         include: {
           items: { include: { product: true } },
           customer: true,
@@ -153,10 +156,11 @@ export class SalesService {
   ) {
     const tenantId = TenantContextService.getTenantId();
     const userId = TenantContextService.getUserId();
+    const centerId = TenantContextService.getCenterId();
 
     return this.prisma.$transaction(async (tx) => {
       const order = await tx.salesOrder.findFirst({
-        where: { id: salesOrderId, tenantId },
+        where: { id: salesOrderId, tenantId, centerId },
         include: { items: { include: { product: true } } },
       });
 
@@ -179,6 +183,7 @@ export class SalesService {
         categoryAccountId: options?.categoryAccountId,
         userId,
         tenantId,
+        centerId,
       });
 
       await tx.salesOrder.update({
@@ -187,7 +192,7 @@ export class SalesService {
       });
 
       return tx.salesOrder.findFirst({
-        where: { id: order.id, tenantId },
+        where: { id: order.id, tenantId, centerId },
         include: {
           items: { include: { product: true } },
           customer: true,
@@ -214,6 +219,7 @@ export class SalesService {
       categoryAccountId?: string;
       userId?: string;
       tenantId: string;
+      centerId: string;
     },
   ) {
     // A. Efeito Cascata no Estoque
@@ -221,7 +227,10 @@ export class SalesService {
       const product = productsMap.get(item.productId);
 
       if (product && product.type === 'PRODUCT') {
-        const currentStock = new Prisma.Decimal(product.stockQuantity ?? product.currentStock ?? 0);
+        const centerStock = await tx.centerStock.findUnique({ where: {
+          tenantId_centerId_productId: { tenantId: ctx.tenantId, centerId: ctx.centerId, productId: item.productId },
+        } });
+        const currentStock = new Prisma.Decimal(centerStock?.quantity ?? 0);
         const quantityToDeduct = new Prisma.Decimal(item.quantity);
 
         if (currentStock.lessThan(quantityToDeduct)) {
@@ -233,15 +242,21 @@ export class SalesService {
         const newStock = currentStock.sub(quantityToDeduct);
 
         // Atualiza estoque no catálogo
+        await tx.centerStock.upsert({
+          where: { tenantId_centerId_productId: { tenantId: ctx.tenantId, centerId: ctx.centerId, productId: item.productId } },
+          create: { tenantId: ctx.tenantId, centerId: ctx.centerId, productId: item.productId, quantity: newStock },
+          update: { quantity: newStock },
+        });
         await tx.product.update({
           where: { id: item.productId },
-          data: { stockQuantity: newStock },
+          data: { stockQuantity: { decrement: quantityToDeduct } },
         });
 
         // Grava movimentação de saída auditável (Código 601 - Saída por Venda/Faturamento)
         await tx.stockMovement.create({
           data: {
             tenantId: ctx.tenantId,
+            centerId: ctx.centerId,
             productId: item.productId,
             movementTypeCode: MovementTypeCode.OUT_SALE,
             quantity: quantityToDeduct,
@@ -280,6 +295,7 @@ export class SalesService {
       await tx.financialRecord.create({
         data: {
           tenantId: ctx.tenantId,
+          centerId: ctx.centerId,
           type: FinancialRecordType.RECEIVABLE,
           status: FinancialRecordStatus.PENDING,
           description: `Venda #${order.orderNumber} - Parcela ${i}/${installments}`,
@@ -303,10 +319,12 @@ export class SalesService {
    */
   async findAll(status?: SalesOrderStatus) {
     const tenantId = TenantContextService.getTenantId();
+    const centerId = TenantContextService.getCenterId();
 
     return this.prisma.client.salesOrder.findMany({
       where: {
         tenantId,
+        centerId,
         ...(status ? { status } : {}),
       },
       include: {
@@ -323,9 +341,10 @@ export class SalesService {
    */
   async findOne(id: string) {
     const tenantId = TenantContextService.getTenantId();
+    const centerId = TenantContextService.getCenterId();
 
     const order = await this.prisma.client.salesOrder.findFirst({
-      where: { id, tenantId },
+      where: { id, tenantId, centerId },
       include: {
         customer: true,
         items: { include: { product: true } },

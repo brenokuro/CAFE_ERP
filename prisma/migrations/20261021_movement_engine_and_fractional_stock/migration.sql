@@ -27,16 +27,16 @@ CREATE TABLE IF NOT EXISTS "movement_types" (
 );
 
 -- Carga inicial dos Tipos de Movimento Oficiais do CAFE ERP
-INSERT INTO "movement_types" ("code", "description", "direction", "requires_reason", "requires_batch", "active")
+INSERT INTO "movement_types" ("code", "description", "direction", "requires_reason", "requires_batch", "active", "updated_at")
 VALUES
-    ('101', 'Entrada por Compra/Fornecedor', 'IN', false, false, true),
-    ('201', 'Consumo por Produção/Uso Interno', 'OUT', false, false, true),
-    ('202', 'Estorno de Consumo por Produção', 'IN', true, false, true),
-    ('301', 'Transferência entre Centros/Almoxarifados', 'TRANSFER', false, false, true),
-    ('501', 'Baixa por Perda / Avaria / Validade', 'OUT', true, false, true),
-    ('502', 'Estorno de Baixa por Perda', 'IN', true, false, true),
-    ('601', 'Saída por Venda/Faturamento', 'OUT', false, false, true),
-    ('602', 'Devolução de Venda por Cliente', 'IN', false, false, true)
+    ('101', 'Entrada por Compra/Fornecedor', 'IN', false, false, true, now()),
+    ('201', 'Consumo por Produção/Uso Interno', 'OUT', false, false, true, now()),
+    ('202', 'Estorno de Consumo por Produção', 'IN', true, false, true, now()),
+    ('301', 'Transferência entre Centros/Almoxarifados', 'TRANSFER', false, false, true, now()),
+    ('501', 'Baixa por Perda / Avaria / Validade', 'OUT', true, false, true, now()),
+    ('502', 'Estorno de Baixa por Perda', 'IN', true, false, true, now()),
+    ('601', 'Saída por Venda/Faturamento', 'OUT', false, false, true, now()),
+    ('602', 'Devolução de Venda por Cliente', 'IN', false, false, true, now())
 ON CONFLICT ("code") DO UPDATE SET
     "description" = EXCLUDED."description",
     "direction" = EXCLUDED."direction",
@@ -71,11 +71,11 @@ CREATE INDEX IF NOT EXISTS "idx_product_batches_tenant_expiration" ON "product_b
 -- 5. Atualização da Tabela de Itens de Pedidos de Venda e Compra para NUMERIC(12, 4)
 ALTER TABLE "sales_order_items"
     ALTER COLUMN "quantity" TYPE NUMERIC(12, 4),
-    ALTER COLUMN "unit_price" TYPE NUMERIC(12, 4);
+    ALTER COLUMN "unitPrice" TYPE NUMERIC(12, 4);
 
 ALTER TABLE "purchase_order_items"
     ALTER COLUMN "quantity" TYPE NUMERIC(12, 4),
-    ALTER COLUMN "unit_cost" TYPE NUMERIC(12, 4);
+    ALTER COLUMN "unitCost" TYPE NUMERIC(12, 4);
 
 -- 6. Atualização da Tabela de Histórico de Movimentações de Estoque (StockMovements)
 ALTER TABLE "stock_movements"

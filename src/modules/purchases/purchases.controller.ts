@@ -15,9 +15,12 @@ import { PurchasesService } from './purchases.service';
 import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PurchaseOrderStatus } from '../../common/enums/domain.enums';
+import { CenterAccessGuard, Roles, RolesGuard } from '../../common/guards/access-control';
+import { UserRole } from '../../common/enums/domain.enums';
 
 @Controller('purchases')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, CenterAccessGuard, RolesGuard)
+@Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.PURCHASING)
 export class PurchasesController {
   constructor(private readonly purchasesService: PurchasesService) {}
 

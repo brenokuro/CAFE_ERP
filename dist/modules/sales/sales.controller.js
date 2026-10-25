@@ -18,6 +18,8 @@ const sales_service_1 = require("./sales.service");
 const create_sales_order_dto_1 = require("./dto/create-sales-order.dto");
 const jwt_auth_guard_1 = require("../../common/guards/jwt-auth.guard");
 const domain_enums_1 = require("../../common/enums/domain.enums");
+const access_control_1 = require("../../common/guards/access-control");
+const domain_enums_2 = require("../../common/enums/domain.enums");
 let SalesController = class SalesController {
     salesService;
     constructor(salesService) {
@@ -70,7 +72,8 @@ __decorate([
 ], SalesController.prototype, "findOne", null);
 exports.SalesController = SalesController = __decorate([
     (0, common_1.Controller)('sales'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, access_control_1.CenterAccessGuard, access_control_1.RolesGuard),
+    (0, access_control_1.Roles)(domain_enums_2.UserRole.ADMIN, domain_enums_2.UserRole.MANAGER, domain_enums_2.UserRole.SALES),
     __metadata("design:paramtypes", [sales_service_1.SalesService])
 ], SalesController);
 //# sourceMappingURL=sales.controller.js.map

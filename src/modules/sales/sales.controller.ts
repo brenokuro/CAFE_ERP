@@ -15,9 +15,12 @@ import { SalesService } from './sales.service';
 import { CreateSalesOrderDto } from './dto/create-sales-order.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { SalesOrderStatus } from '../../common/enums/domain.enums';
+import { CenterAccessGuard, Roles, RolesGuard } from '../../common/guards/access-control';
+import { UserRole } from '../../common/enums/domain.enums';
 
 @Controller('sales')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, CenterAccessGuard, RolesGuard)
+@Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.SALES)
 export class SalesController {
   constructor(private readonly salesService: SalesService) {}
 
