@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "build": "tsc",
+    "build:vercel": "npm run prisma:generate && npm run build && npm run build --prefix frontend",
     "test": "npm run build && jest --runInBand && node --test test/*.test.cjs",
     "start": "node --env-file=.env dist/main.js",
     "start:dev": "npm run build && node --env-file=.env dist/main.js",

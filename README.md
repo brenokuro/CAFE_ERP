@@ -13,6 +13,16 @@ Requisitos: Node.js 20+, PostgreSQL e npm.
 
 A API fica em `http://localhost:3000/api/v1`; a interface usa essa URL por padrão. Para outro endereço, defina `VITE_API_URL` no ambiente do Vite. `CORS_ORIGINS` aceita origens separadas por vírgula e, por padrão, permite `http://localhost:5173`.
 
+### Deploy na Vercel
+
+O repositório está configurado para um único projeto Vercel na raiz: o build gera a interface estática e publica a API NestJS como função serverless em `/api/*`. A interface usa `/api/v1` no mesmo domínio por padrão. Faça o import do repositório na Vercel sem mudar o Root Directory e configure as variáveis abaixo em **Project Settings → Environment Variables**:
+
+- `DATABASE_URL`: URL de um PostgreSQL acessível pela Vercel (use um banco gerenciado; não use `localhost`).
+- `JWT_SECRET`: segredo aleatório com pelo menos 32 caracteres.
+- `CORS_ORIGINS`: opcional para essa implantação no mesmo domínio; necessário se outros domínios chamarem a API, com as origens separadas por vírgula.
+
+O comando `build:vercel` gera o Prisma Client, compila o backend e cria `frontend/dist`. Aplique as migrações no banco de produção com `npx prisma migrate deploy` antes de usar o app e inicialize o primeiro administrador pelo script de bootstrap em ambiente com acesso ao banco. Não configure `VITE_API_URL` para uma URL local na Vercel.
+
 O login da interface já valida as credenciais na API. As telas operacionais ainda usam dados demonstrativos em memória (`frontend/src/services/api.ts`); essas alterações não são persistidas e devem ser substituídas por chamadas aos endpoints antes de usar o ERP com dados reais.
 
 ### Administração, centros e dados legados

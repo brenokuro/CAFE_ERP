@@ -5,7 +5,7 @@ export interface LoginResponse {
 }
 
 export interface Center { id: string; name: string; active: boolean }
-export const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1').replace(/\/$/, '');
+export const API_URL = (import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:3000/api/v1' : '/api/v1')).replace(/\/$/, '');
 const TOKEN_KEY = 'cafe_access_token';
 const SESSION_KEY = 'cafe_session';
 const CENTER_KEY = 'cafe_center_id';
